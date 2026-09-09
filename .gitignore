@@ -1,0 +1,8 @@
+/PA 引擎数据表.pdf
+.DS_Store
+.env
+.env.*
+!.env.example
+__pycache__/
+.pytest_cache/
+.venv/

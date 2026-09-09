@@ -1,0 +1,52 @@
+name: lexiod-refactor
+
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: lexiod-pipeline/Dockerfile.hybrid
+      target: runtime
+      args:
+        BASE_RUNTIME_IMAGE: ${BASE_RUNTIME_IMAGE:-lexiod-texopt:u1}
+    image: lexiod-refactor:local
+    env_file:
+      - Lexoid/.env
+      - lexiod-pipeline/files/.env
+    environment:
+      PDF_SOURCE_ROOT: /input
+      PIPELINE_OUTPUT_ROOT: /data
+      PIPELINE_PUBLISH_ROOT: ${PIPELINE_PUBLISH_ROOT:-/data/optimized}
+      PIPELINE_STAGE_TIMEOUT_SECONDS: ${PIPELINE_STAGE_TIMEOUT_SECONDS:-43200}
+      RECOGNITION_OCR: ${RECOGNITION_OCR:-none}
+      VISION_CONCURRENCY: ${VISION_CONCURRENCY:-4}
+      RECONCILE_CONCURRENCY: ${RECONCILE_CONCURRENCY:-2}
+      RENDER_DPI: ${RENDER_DPI:-240}
+      RETRY_DPI: ${RETRY_DPI:-480}
+      TEXOPT_SEMANTIC_NAMING: ${TEXOPT_SEMANTIC_NAMING:-deferred}
+      TEXOPT_NAME_CACHE: ${TEXOPT_NAME_CACHE:-/data/.cache/semantic-names.sqlite3}
+      PADDLE_PDX_MODEL_SOURCE: ${PADDLE_PDX_MODEL_SOURCE:-modelscope}
+    volumes:
+      - ../Downloads:/input:ro
+      - ../data:/data
+      - ../work/refactor:/work
+      - paddle-cache:/root/.paddle
+      - paddlex-cache:/root/.paddlex
+      - huggingface-cache:/root/.cache/huggingface
+    command: ["texopt-pipeline", "--once"]
+    restart: "no"
+
+  tests:
+    build:
+      context: .
+      dockerfile: lexiod-pipeline/Dockerfile.hybrid
+      target: test
+    image: lexiod-refactor-test:local
+    network_mode: none
+    profiles: ["test"]
+
+volumes:
+  paddle-cache:
+  paddlex-cache:
+    external: true
+    name: lexiod-u2-paddlex-cache
+  huggingface-cache:

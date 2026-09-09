@@ -1,0 +1,6 @@
+[submodule "Lexoid"]
+	path = Lexoid
+	url = https://github.com/Maxrayyy/lexiod.git
+[submodule "lexiod-pipeline"]
+	path = lexiod-pipeline
+	url = https://github.com/Maxrayyy/lexiod-pipeline.git
