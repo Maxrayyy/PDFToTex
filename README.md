@@ -29,6 +29,7 @@ git submodule status
 | 需要做什么 | 入口 |
 | --- | --- |
 | 查看容器状态、PDF 转译列表和阶段进度 | [实时监控 latest.md](../data/monitoring/realtime/latest.md) |
+| 按批次年月查看排队和完成情况 | [批次转译进度 batches.md](../data/monitoring/batches.md) |
 | 查看每日完成量、页数、token 和估算费用 | [每日统计 daily.md](../data/monitoring/daily/daily.md) |
 | 检查正式发布的 TEX | [data/optimized](../data/optimized/) |
 | 查编译 PDF、识别证据、日志和缓存 | [data/workers](../data/workers/) |
@@ -216,7 +217,7 @@ docker compose run --rm --no-deps worker texopt-pipeline --help
 }
 ```
 
-同一清单按 `sources` 顺序处理，使用同一发布目录，所以应放同一批次的 PDF。`sources` 和 `monitor_config` 是容器路径，`host_data` 是宿主机路径。监控配置需已存在，初始化见第 7 节。工作区按文件名主干分配，跨批次有同名 PDF 时需先解决工作目录冲突。
+同一清单按 `sources` 顺序处理。默认使用同一发布目录；跨批次或 U1/U2/U3 时，在 JSON 中设置 `"source_root": "/input"`，并将 `PIPELINE_PUBLISH_ROOT` 设置为 `/data/optimized`，每份结果将保留输入的相对目录。`sources` 和 `monitor_config` 是容器路径，`host_data` 是宿主机路径。监控配置需已存在，初始化见第 7 节。工作区按文件名主干分配，清单中存在同名主干时会拒绝启动，避免工作目录冲突。
 
 先检查清单及页数，不开始转换或调用模型：
 
@@ -350,6 +351,12 @@ tail -n 80 ../data/monitoring/realtime/runner.error.log
 自动重启只针对退出码 1、当前任务因临时模型服务故障明确暂停、且日志与本次运行时间匹配的容器。认证/权限错误、OOM、普通编译失败或已删除容器不会自动重启。维护时可设置 `auto_restart.enabled=false`。
 
 可选 `recover_publish_from` 用于已知发布路径错误：仅在正常退出、manifest 完成、原文件/工作文件/记录的 SHA-256 一致时归位文件，不覆盖已存在的目标。
+
+### 批次进度清单
+
+[批次转译进度](../data/monitoring/batches.md) 由实时监控每 360 秒刷新，按批次编号中的年月倒序排列，同月按末尾流水号倒序。`A39Z201202605032` 拆分为 `A39`（批次）、`Z2`（工艺）、`01`（线）、`202605`（年月）、`032`（流水号）；部分旧编号没有线编码。
+
+同批次在不同 U 目录下的 PDF 合并统计。只有所有 PDF 均有成功完成记录且正式 TEX 有效，批次才标记为已完成；仅存在旧 TEX 会标记待核验。未来年月、无法解析的编号和 `_skip` 目录会单独备注。实时配置的 `batch_status` 指定 `source_root`、`publish_root`、`work_root`、`output_file`，输入和结果仍存放在主仓库外。
 
 ## 8. 每日转换与费用监控
 

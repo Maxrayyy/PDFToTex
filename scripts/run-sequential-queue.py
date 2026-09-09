@@ -1,9 +1,11 @@
 """Run approved PDFs serially in one worker, retaining per-document caches."""
 
 import argparse
+from dataclasses import replace
 from datetime import datetime, timezone
 import fcntl
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -20,6 +22,11 @@ def now():
 
 def save(path, data):
     write_utf8_atomic(path, json.dumps(data, ensure_ascii=False, indent=2))
+
+
+def publication_path(source, queue, config):
+    relative = source.relative_to(queue['source_root']) if queue.get('source_root') else Path(source.name)
+    return Path(config.publish_root) / relative.with_suffix('.tex')
 
 
 def monitor_current(queue, job):
@@ -49,6 +56,8 @@ def main():
             config.vision_concurrency, config.reconcile_concurrency) == (
                 'gpt-5.6-sol', 'gpt-6-astra', 240, 2, 2)
     assert config.optimizer_version == 'texopt-layout-v11-outline-field-safe'
+    if len({Path(source).stem for source in queue['sources']}) != len(queue['sources']):
+        raise ValueError('Queue PDF stems must be unique to keep work directories separate')
     jobs = []
     for source in queue['sources']:
         path = Path(source)
@@ -57,7 +66,7 @@ def main():
         doc.close()
         jobs.append({'source': source, 'stem': path.stem, 'pages': pages, 'status': 'pending',
             'work_root': str(Path('/data/workers') / path.stem),
-            'output_tex': str(Path(config.publish_root) / (path.stem + '.tex'))})
+            'output_tex': str(publication_path(path, queue, config))})
     print(json.dumps({'container': queue['container'], 'jobs': jobs,
                       'dpi': config.render_dpi, 'concurrency': config.vision_concurrency},
                      ensure_ascii=False), flush=True)
@@ -75,17 +84,19 @@ def main():
             monitor_current(queue, job)
             print('QUEUE START: ' + job['source'], flush=True)
             root = Path(job['work_root'])
+            job_config = replace(config, publish_root=str(Path(job['output_tex']).parent))
             resume = root / 'resume-none.json'
             try:
                 if resume.exists():
                     legacy = json.loads(resume.read_text())['legacy_key']
                     resume_script = Path(__file__).resolve().parent / 'resume-none/run.py'
                     result = subprocess.run([sys.executable, '-u', str(resume_script),
-                        '--source', job['source'], '--output', str(root), '--legacy-key', legacy])
+                        '--source', job['source'], '--output', str(root), '--legacy-key', legacy],
+                        env={**os.environ, 'PIPELINE_PUBLISH_ROOT': job_config.publish_root})
                     status = result.returncode
                 else:
                     source = Path(job['source'])
-                    status = run_batch(source.parent, root, config, include={source.name})
+                    status = run_batch(source.parent, root, job_config, include={source.name})
                 job.update(status='done' if status == 0 else 'failed', exit_code=status)
             except Exception as exc:
                 job.update(status='failed', error=str(exc))
