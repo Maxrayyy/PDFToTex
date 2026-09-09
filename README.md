@@ -93,6 +93,7 @@ lexiod/
     optimized/<单位>/<类别>/<批次>/   正式发布 TEX
     workers/<PDF文件名主干>/          每份 PDF 的工作区
     workers/queues/                   队列 JSON、状态、锁
+    fix/                              修复、验证及临时产物工作区
     monitoring/realtime/             实时监控
     monitoring/daily/                日报与费用统计
     .cache/semantic-names.sqlite3     共享语义命名缓存
@@ -105,12 +106,15 @@ lexiod/
 | --- | --- | --- |
 | `../Downloads` | `/input`，只读 | 原始 PDF |
 | `../data` | `/data`，可写 | 结果、工作区、队列、监控、缓存 |
-| `./scripts` | `/work`，只读 | 主仓库管理的队列与续跑脚本 |
+| `./scripts` | `/opt/pdftotex`，只读 | 主仓库管理的队列与续跑脚本 |
 | `lexiod-refactor_paddle-cache` 命名卷 | `/root/.paddle` | Paddle 缓存 |
 | `lexiod-u2-paddlex-cache` 外部命名卷 | `/root/.paddlex` | PaddleX 模型，通常在 `official_models/` |
 | `lexiod-refactor_huggingface-cache` 命名卷 | `/root/.cache/huggingface` | Hugging Face 模型缓存 |
 
 删除容器不删除上述宿主机文件，重建镜像也不清空命名卷。运行脚本随总项目一起克隆，通过只读挂载提供给容器，工作结果写入 `/data`。
+
+`data/fix` 用于修复和验证，容器内路径为 `/data/fix`，不纳入日报扫描。
+每次修复使用独立子目录，存放源页截图、修复候选、对比 PDF 和验证日志；正式产物仍发布到 `data/optimized`，生产缓存仍保留在 `data/workers`。
 
 ### 3.2 每份 PDF 的产物
 
@@ -199,7 +203,7 @@ docker compose run --rm --no-deps worker texopt-pipeline --help
 
 ### 5.2 当前推荐：指定批次队列
 
-入口是主仓库的 [scripts/run-sequential-queue.py](scripts/run-sequential-queue.py)，容器内路径为 `/work/run-sequential-queue.py`。
+入口是主仓库的 [scripts/run-sequential-queue.py](scripts/run-sequential-queue.py)，容器内路径为 `/opt/pdftotex/run-sequential-queue.py`。
 当 PDF 工作区存在 `resume-none.json` 时，队列会调用 [scripts/resume-none/run.py](scripts/resume-none/run.py)，校验旧缓存来源并按已记录的设置续跑。
 先在 `../data/workers/queues/new-batch.json` 准备新清单，下面的容器名、`NEW_BATCH` 和 PDF 路径均需替换为实际值：
 
@@ -220,7 +224,7 @@ docker compose run --rm --no-deps worker texopt-pipeline --help
 docker compose run --rm --no-deps \
   -e VISION_CONCURRENCY=2 -e RECONCILE_CONCURRENCY=2 -e RENDER_DPI=240 \
   -e PIPELINE_PUBLISH_ROOT=/data/optimized/U1/批次数据/NEW_BATCH \
-  worker python /work/run-sequential-queue.py \
+  worker python /opt/pdftotex/run-sequential-queue.py \
   /data/workers/queues/new-batch.json --prepare-only
 ```
 
@@ -230,7 +234,7 @@ docker compose run --rm --no-deps \
 docker compose run -d --no-deps --name lexiod-new-batch \
   -e VISION_CONCURRENCY=2 -e RECONCILE_CONCURRENCY=2 -e RENDER_DPI=240 \
   -e PIPELINE_PUBLISH_ROOT=/data/optimized/U1/批次数据/NEW_BATCH \
-  worker python -u /work/run-sequential-queue.py \
+  worker python -u /opt/pdftotex/run-sequential-queue.py \
   /data/workers/queues/new-batch.json
 ```
 
@@ -398,7 +402,7 @@ docker compose run --rm --no-deps worker python /opt/lexiod-tools/prefetch_model
   --manifest /data/.cache/model-cache-manifest.json --verify-only
 ```
 
-哈希清单位于宿主机 `data/.cache/model-cache-manifest.json`。`/work` 为只读脚本目录，预热时需显式传入上面的 `--manifest` 路径。预热不加载推理模型，缓存省去下载时间，进程启动仍要加载权重。Linux ARM64 CPU 兼容处理位于 `lexoid.core.paddle_runtime`。当前未设置单容器内存上限，仍受 Docker Desktop 全局内存和 swap 限制。
+哈希清单位于宿主机 `data/.cache/model-cache-manifest.json`，预热时需显式传入上面的 `--manifest` 路径。预热不加载推理模型，缓存省去下载时间，进程启动仍要加载权重。Linux ARM64 CPU 兼容处理位于 `lexoid.core.paddle_runtime`。当前未设置单容器内存上限，仍受 Docker Desktop 全局内存和 swap 限制。
 
 ## 10. 常见问题与备份
 

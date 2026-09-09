@@ -79,7 +79,8 @@ def main():
             try:
                 if resume.exists():
                     legacy = json.loads(resume.read_text())['legacy_key']
-                    result = subprocess.run([sys.executable, '-u', '/work/resume-none/run.py',
+                    resume_script = Path(__file__).resolve().parent / 'resume-none/run.py'
+                    result = subprocess.run([sys.executable, '-u', str(resume_script),
                         '--source', job['source'], '--output', str(root), '--legacy-key', legacy])
                     status = result.returncode
                 else:

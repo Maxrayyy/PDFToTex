@@ -28,7 +28,7 @@ services:
     volumes:
       - ../Downloads:/input:ro
       - ../data:/data
-      - ./scripts:/work:ro
+      - ./scripts:/opt/pdftotex:ro
       - paddle-cache:/root/.paddle
       - paddlex-cache:/root/.paddlex
       - huggingface-cache:/root/.cache/huggingface
