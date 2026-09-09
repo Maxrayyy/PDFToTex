@@ -22,7 +22,7 @@ git submodule update --init --recursive
 git submodule status
 ```
 
-总项目保存 README、Compose、部署文档及两个子仓库的提交引用。修改子项目后，先在子仓库创建开发分支、提交并推送，再在总项目提交更新后的引用。更新前先提交或保存本地改动；不要把 `.env`、模型缓存和转换数据提交到 Git。
+总项目保存 README、Compose、运行脚本、部署文档及两个子仓库的提交引用。修改子项目后，先在子仓库创建开发分支、提交并推送，再在总项目提交更新后的引用。更新前先提交或保存本地改动；不要把 `.env`、模型缓存和转换数据提交到 Git。
 
 ## 1. 常用入口
 
@@ -82,12 +82,13 @@ lexiod/
   PDFToTex/
     README.md                        本文
     docker-compose.yml               当前运行入口
+    scripts/
+      run-sequential-queue.py         批次队列入口
+      resume-none/run.py              旧识别缓存续跑工具
     Lexoid/                          识别器独立仓库
     lexiod-pipeline/                  优化与流水线独立仓库
       Dockerfile.hybrid               运行/测试镜像
       files/                         texopt、流水线、监控脚本
-  work/refactor/
-    run-sequential-queue.py           当前批次队列脚本
   data/
     optimized/<单位>/<类别>/<批次>/   正式发布 TEX
     workers/<PDF文件名主干>/          每份 PDF 的工作区
@@ -95,7 +96,6 @@ lexiod/
     monitoring/realtime/             实时监控
     monitoring/daily/                日报与费用统计
     .cache/semantic-names.sqlite3     共享语义命名缓存
-    U1/、U2/、U3/、reruns/             历史工作区与重跑数据
     audits/、benchmarks/              审计与试验记录
 ```
 
@@ -105,12 +105,12 @@ lexiod/
 | --- | --- | --- |
 | `../Downloads` | `/input`，只读 | 原始 PDF |
 | `../data` | `/data`，可写 | 结果、工作区、队列、监控、缓存 |
-| `../work/refactor` | `/work`，可写 | 队列脚本与试验工具 |
+| `./scripts` | `/work`，只读 | 主仓库管理的队列与续跑脚本 |
 | `lexiod-refactor_paddle-cache` 命名卷 | `/root/.paddle` | Paddle 缓存 |
 | `lexiod-u2-paddlex-cache` 外部命名卷 | `/root/.paddlex` | PaddleX 模型，通常在 `official_models/` |
 | `lexiod-refactor_huggingface-cache` 命名卷 | `/root/.cache/huggingface` | Hugging Face 模型缓存 |
 
-删除容器不删除上述宿主机文件，重建镜像也不清空命名卷。迁移时还需保存镜像外的 `work/refactor` 队列脚本。
+删除容器不删除上述宿主机文件，重建镜像也不清空命名卷。运行脚本随总项目一起克隆，通过只读挂载提供给容器，工作结果写入 `/data`。
 
 ### 3.2 每份 PDF 的产物
 
@@ -199,7 +199,9 @@ docker compose run --rm --no-deps worker texopt-pipeline --help
 
 ### 5.2 当前推荐：指定批次队列
 
-入口是 `/work/run-sequential-queue.py`。先在 `../data/workers/queues/new-batch.json` 准备新清单，下面的容器名、`NEW_BATCH` 和 PDF 路径均需替换为实际值：
+入口是主仓库的 [scripts/run-sequential-queue.py](scripts/run-sequential-queue.py)，容器内路径为 `/work/run-sequential-queue.py`。
+当 PDF 工作区存在 `resume-none.json` 时，队列会调用 [scripts/resume-none/run.py](scripts/resume-none/run.py)，校验旧缓存来源并按已记录的设置续跑。
+先在 `../data/workers/queues/new-batch.json` 准备新清单，下面的容器名、`NEW_BATCH` 和 PDF 路径均需替换为实际值：
 
 ```json
 {
@@ -365,7 +367,7 @@ python3 lexiod-pipeline/files/daily_stats.py stop \
 
 日报位于 `data/monitoring/daily/daily.md`，结构化输出为 `daily.json`、`daily.jsonl`，同目录保留统计状态与 `runner.log`、`runner.error.log`。任务安装在 `~/Library/LaunchAgents/com.lexiod.daily-stats.plist`，登录后可自动加载；`stop` 仅卸载当前会话，永久停用或重装前还需处理该 plist。
 
-配置的 `scan_roots` 指定工作区，`source_root` / `publish_root` 指定输入/正式结果，`path_map` 将 `/input`、`/data` 转换为本机路径。新增工作根目录或迁移机器时同步更新；当前统计开始日为 `2026-09-07`。
+配置的 `scan_roots` 当前只扫描 `data/workers`，`source_root` / `publish_root` 指定输入/正式结果，`path_map` 将 `/input`、`/data` 转换为本机路径。新增工作根目录或迁移机器时同步更新；当前统计开始日为 `2026-09-07`，已记账的历史统计保留。
 
 - 完成条件：优化阶段完成、编译成功、生成 PDF 存在，且正式 TEX 与任务产物哈希一致。仅有 TEX 文件不足以计入完成。
 - 按北京时间任务完成日归档，源页数和生成页数分别统计。跨天任务的已记录 token 归到完成日，不等同于接口调用日账单。
@@ -390,11 +392,13 @@ docker compose run --rm --no-deps worker texopt name-fields \
 可选 PaddleOCR 路线可提前下载并验证权重，纯视觉路线通常无需执行：
 
 ```bash
-docker compose run --rm --no-deps worker python /opt/lexiod-tools/prefetch_models.py
-docker compose run --rm --no-deps worker python /opt/lexiod-tools/prefetch_models.py --verify-only
+docker compose run --rm --no-deps worker python /opt/lexiod-tools/prefetch_models.py \
+  --manifest /data/.cache/model-cache-manifest.json
+docker compose run --rm --no-deps worker python /opt/lexiod-tools/prefetch_models.py \
+  --manifest /data/.cache/model-cache-manifest.json --verify-only
 ```
 
-哈希清单位于 `/work/model-cache-manifest.json`。预热不加载推理模型，缓存省去下载时间，进程启动仍要加载权重。Linux ARM64 CPU 兼容处理位于 `lexoid.core.paddle_runtime`。当前未设置单容器内存上限，仍受 Docker Desktop 全局内存和 swap 限制。
+哈希清单位于宿主机 `data/.cache/model-cache-manifest.json`。`/work` 为只读脚本目录，预热时需显式传入上面的 `--manifest` 路径。预热不加载推理模型，缓存省去下载时间，进程启动仍要加载权重。Linux ARM64 CPU 兼容处理位于 `lexoid.core.paddle_runtime`。当前未设置单容器内存上限，仍受 Docker Desktop 全局内存和 swap 限制。
 
 ## 10. 常见问题与备份
 
@@ -410,4 +414,4 @@ docker compose run --rm --no-deps worker python /opt/lexiod-tools/prefetch_model
 | 实时监控不再刷新 | 检查全部完成后的自动卸载、休眠和 `runner.error.log` |
 | 报告有 JSON/版式警告但显示完成 | 编译成功与内容核验不同，应对照源 PDF 检查字段和布局 |
 
-备份至少包含原始 PDF、`data/optimized`、`data/workers`（含隐藏目录）、监控配置和统计状态、`work/refactor` 工具、两个 Git 仓库及本地环境配置。迁移后更新宿主机绝对路径、日报价格文件路径、工作区文件与两个监控 plist，并重新加载定时任务。
+备份至少包含原始 PDF、`data/optimized`、`data/workers`（含隐藏目录）、`data/.cache`、监控配置和统计状态、总项目及两个子仓库、本地环境配置。迁移后更新宿主机绝对路径、日报价格文件路径、工作区文件与两个监控 plist，并重新加载定时任务。

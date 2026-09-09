@@ -28,7 +28,7 @@ services:
     volumes:
       - ../Downloads:/input:ro
       - ../data:/data
-      - ../work/refactor:/work
+      - ./scripts:/work:ro
       - paddle-cache:/root/.paddle
       - paddlex-cache:/root/.paddlex
       - huggingface-cache:/root/.cache/huggingface
