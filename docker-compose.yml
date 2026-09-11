@@ -11,7 +11,7 @@ services:
     image: pdftotex:local
     env_file:
       - Lexoid/.env
-      - lexiod-pipeline/files/.env
+      - lexiod-pipeline/texopt/.env
     environment:
       PDF_SOURCE_ROOT: /input
       PIPELINE_OUTPUT_ROOT: /data
