@@ -3,7 +3,7 @@ from decimal import Decimal
 import json
 from pathlib import Path
 
-from texopt.daily_costs import billing_call, combine_costs, hydrate_billing, price_record
+from texopt.monitoring.daily_costs import billing_call, combine_costs, hydrate_billing, price_record
 
 
 PRICES = json.loads(Path(__file__).with_name("model_prices.json").read_text())

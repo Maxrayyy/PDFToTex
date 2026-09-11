@@ -14,5 +14,5 @@ texopt = "texopt.cli:main"
 texopt-pipeline = "texopt.pipeline_daemon:main"
 
 [tool.setuptools]
-packages = ["texopt"]
+packages = ["texopt", "texopt.monitoring"]
 package-dir = {texopt = "."}

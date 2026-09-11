@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from texopt.batch_status import parse_batch_code, collect_batches, render_batch_report
+from texopt.monitoring.batch_status import parse_batch_code, collect_batches, render_batch_report
 
 
 @pytest.mark.parametrize('code,expected', [

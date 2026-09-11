@@ -50,7 +50,7 @@ docker compose run --rm worker
 单次监控检查：
 
 ```bash
-python3 pipeline/texopt/worker_watch.py once \\
+python3 pipeline/texopt/monitoring/worker_watch.py once \\
   --config "$(pwd)/../data/monitoring/realtime/config.json"
 ```
 

@@ -5,7 +5,7 @@ import plistlib
 import sqlite3
 from unittest.mock import patch
 
-from texopt.daily_stats import ZONE, call_summary, install, poll
+from texopt.monitoring.daily_stats import ZONE, call_summary, install, poll
 from texopt.pipeline_state import SCHEMA
 
 

@@ -6,7 +6,7 @@ import hashlib
 import pytest
 from unittest.mock import patch
 
-from texopt.worker_watch import install, probe_target, read_new_lines, summarize_calls, render_report
+from texopt.monitoring.worker_watch import install, probe_target, read_new_lines, summarize_calls, render_report
 
 
 @pytest.mark.parametrize("message", ["error: no such object: worker-a",
@@ -274,7 +274,7 @@ def test_monitor_tracks_page_checks_and_model_upgrades_without_double_counting(t
 
 
 def test_queue_report_keeps_order_and_uses_completion_records(tmp_path, monkeypatch):
-    from . import worker_watch as watch
+    from texopt.monitoring import worker_watch as watch
 
     queue_dir = tmp_path / "queues"
     queue_dir.mkdir()
@@ -312,7 +312,7 @@ def test_queue_report_keeps_order_and_uses_completion_records(tmp_path, monkeypa
 
 
 def test_paused_queue_and_unreadable_status_are_not_reported_as_complete(tmp_path, monkeypatch):
-    from . import worker_watch as watch
+    from texopt.monitoring import worker_watch as watch
 
     queue_dir = tmp_path / "queues"
     queue_dir.mkdir()

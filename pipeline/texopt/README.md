@@ -96,9 +96,9 @@ SHA-256 三者一致时，将该文件原样归位到 `output_tex`，不覆盖�
 所有目标均终止且没有待执行自动重启时自动卸载定时任务；新批次启动后需要重新安装。
 
 ```sh
-python3 texopt/worker_watch.py install --config /绝对路径/config.json
-python3 texopt/worker_watch.py once --config /绝对路径/config.json
-python3 texopt/worker_watch.py stop --config /绝对路径/config.json
+python3 texopt/monitoring/worker_watch.py install --config /绝对路径/config.json
+python3 texopt/monitoring/worker_watch.py once --config /绝对路径/config.json
+python3 texopt/monitoring/worker_watch.py stop --config /绝对路径/config.json
 ```
 
 监测目录中的 `latest.md` 是中文状态摘要，`latest.json` 保存结构化详情，
@@ -127,9 +127,9 @@ python3 texopt/worker_watch.py stop --config /绝对路径/config.json
 定时任务安装到 `~/Library/LaunchAgents/`，后续登录继续运行，不随当前 worker 退出而停止。
 
 ```sh
-python3 texopt/daily_stats.py once --config /绝对路径/daily/config.json
-python3 texopt/daily_stats.py install --config /绝对路径/daily/config.json
-python3 texopt/daily_stats.py stop --config /绝对路径/daily/config.json
+python3 texopt/monitoring/daily_stats.py once --config /绝对路径/daily/config.json
+python3 texopt/monitoring/daily_stats.py install --config /绝对路径/daily/config.json
+python3 texopt/monitoring/daily_stats.py stop --config /绝对路径/daily/config.json
 ```
 
 配置指定 `scan_roots`（worker 数据目录）、`source_root`（原始 PDF 根目录）、

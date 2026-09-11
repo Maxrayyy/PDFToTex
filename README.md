@@ -290,7 +290,7 @@ docker rm lexiod-new-batch
 
 ### 7.1 入口与展示规则
 
-宿主机运行 [worker_watch.py](pipeline/texopt/worker_watch.py)，使用 [realtime/config.json](../data/monitoring/realtime/config.json)。当前通过 macOS `launchd` 每 **360 秒（6 分钟）**检查一次；脚本默认值为 600 秒，实际以配置及加载任务为准。
+宿主机运行 [worker_watch.py](pipeline/texopt/monitoring/worker_watch.py)，使用 [realtime/config.json](../data/monitoring/realtime/config.json)。当前通过 macOS `launchd` 每 **360 秒（6 分钟）**检查一次；脚本默认值为 600 秒，实际以配置及加载任务为准。
 
 | `data/monitoring/realtime/` 中的文件 | 内容 |
 | --- | --- |
@@ -308,17 +308,17 @@ PDF 清单来自 `data/workers/queues/*.status.json`，只有 `status=done` 且 
 ### 7.2 刷新、安装与停止
 
 ```bash
-python3 pipeline/texopt/worker_watch.py once \
+python3 pipeline/texopt/monitoring/worker_watch.py once \
   --config ../data/monitoring/realtime/config.json
 
 # 任务未加载时安装；安装后立即检查一次
-python3 pipeline/texopt/worker_watch.py install \
+python3 pipeline/texopt/monitoring/worker_watch.py install \
   --config ../data/monitoring/realtime/config.json
 
 launchctl print "gui/$(id -u)/com.lexiod.worker-watch.realtime"
 
 # 只停止监控调度，不停止转换容器
-python3 pipeline/texopt/worker_watch.py stop \
+python3 pipeline/texopt/monitoring/worker_watch.py stop \
   --config ../data/monitoring/realtime/config.json
 
 tail -n 80 ../data/monitoring/realtime/runner.error.log
@@ -360,19 +360,19 @@ tail -n 80 ../data/monitoring/realtime/runner.error.log
 
 ## 8. 每日转换与费用监控
 
-宿主机运行 [daily_stats.py](pipeline/texopt/daily_stats.py)，配置为 [daily/config.json](../data/monitoring/daily/config.json)，当前每 **600 秒（10 分钟）**刷新。它只读扫描本地状态、产物和调用日志，不依赖容器仍然存在，也不随转换容器退出而停止。
+宿主机运行 [daily_stats.py](pipeline/texopt/monitoring/daily_stats.py)，配置为 [daily/config.json](../data/monitoring/daily/config.json)，当前每 **600 秒（10 分钟）**刷新。它只读扫描本地状态、产物和调用日志，不依赖容器仍然存在，也不随转换容器退出而停止。
 
 ```bash
-python3 pipeline/texopt/daily_stats.py once \
+python3 pipeline/texopt/monitoring/daily_stats.py once \
   --config ../data/monitoring/daily/config.json
 
 # 首次安装，同名 LaunchAgent 已存在时不要重复安装
-python3 pipeline/texopt/daily_stats.py install \
+python3 pipeline/texopt/monitoring/daily_stats.py install \
   --config ../data/monitoring/daily/config.json
 
 launchctl print "gui/$(id -u)/com.lexiod.daily-stats"
 
-python3 pipeline/texopt/daily_stats.py stop \
+python3 pipeline/texopt/monitoring/daily_stats.py stop \
   --config ../data/monitoring/daily/config.json
 ```
 

@@ -20,8 +20,8 @@ if __package__:
     from .worker_watch import atomic_write, has_recognition_placeholder
     from .daily_costs import combine_costs, cost_label, hydrate_billing, price_record
 else:
-    from worker_watch import atomic_write, has_recognition_placeholder
-    from daily_costs import combine_costs, cost_label, hydrate_billing, price_record
+    from monitoring.worker_watch import atomic_write, has_recognition_placeholder
+    from monitoring.daily_costs import combine_costs, cost_label, hydrate_billing, price_record
 
 
 ZONE = ZoneInfo("Asia/Shanghai")

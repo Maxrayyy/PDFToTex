@@ -8,7 +8,7 @@ setup(
     version="0.1.0",
     description="Durable Lexoid LaTeX optimization and reviewed JSON pipeline",
     python_requires=">=3.10",
-    packages=["texopt"],
+    packages=["texopt", "texopt.monitoring"],
     package_dir={"texopt": "."},
     entry_points={
         "console_scripts": [

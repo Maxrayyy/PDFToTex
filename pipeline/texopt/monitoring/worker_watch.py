@@ -632,7 +632,7 @@ def poll(config):
             if __package__:
                 from .batch_status import render_batch_report
             else:
-                from batch_status import render_batch_report
+                from monitoring.batch_status import render_batch_report
             settings = config["batch_status"]
             atomic_write(Path(settings["output_file"]), render_batch_report(
                 settings, config["queue_dir"], snapshot["checked_at"]))
