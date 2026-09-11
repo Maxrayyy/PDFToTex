@@ -9,15 +9,10 @@ PDFToTex 只保留当前生产链路：视觉识别、方向检测、TeX 生成�
 ```text
 PDFToTex/
 ├── Lexoid/                 # 视觉识别核心 Python 包
-├── pipeline/               # PDF -> TeX 流水线 Python 包（分发名 pdftotex-pipeline，导入名 texopt）
-│   ├── __init__.py
-│   ├── cli.py              # texopt 命令入口
-│   ├── stages.py           # 阶段编排和状态推进
-│   ├── recognition/        # 识别调用、回退和证据
-│   ├── optimization/       # TeX 检查、修复、测宽和编译
-│   ├── monitoring/         # worker_watch、日报和队列状态
-│   └── tests/              # 流水线测试
-├── docker/                 # Dockerfile 和 Compose 入口
+├── pipeline/               # PDF -> TeX 流水线
+│   ├── texopt/              # 分发名 pdftotex-pipeline，导入名 texopt
+│   ├── tests/               # 流水线测试
+│   └── docker/              # Dockerfile 和 Compose 入口
 ├── scripts/                # 宿主机队列及一次性工具
 ├── docs/                   # 架构、已知问题和运行说明
 ├── AGENT.md
@@ -42,4 +37,4 @@ PDFToTex/
 
 ## 当前过渡状态
 
-流水线包已从 `files` 改名为 `texopt`，Docker 入口位于 `pipeline/docker/`，测试位于 `pipeline/tests/`。
+流水线包已从 `files` 改名为 `texopt`，Docker 入口位于 `pipeline/docker/`，测试位于 `pipeline/tests/`。生产模块保留在同一 `texopt` 包中，以维持现有相对导入和命令入口稳定。

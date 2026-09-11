@@ -4,7 +4,7 @@
 
 **Goal:** 将流水线目录收敛为职责清晰的 `pipeline/` 与 `docker/` 结构，同时保持现有 PDF 转 TeX、JSON、监控和容器命令兼容。
 
-**Architecture:** Python 流水线源码使用 `texopt` 导入名，分发名为 `pdftotex-pipeline`，源码目录提升为项目级 `pipeline/`；识别、优化、监控模块按职责分组。Docker 文件集中到 `docker/`，根 Compose 作为唯一生产入口。
+**Architecture:** Python 流水线源码使用 `texopt` 导入名，分发名为 `pdftotex-pipeline`，源码目录提升为项目级 `pipeline/`；生产模块保留在一个稳定包内，测试和 Docker 入口独立归档。根 Compose 作为唯一生产入口。
 
 **Tech Stack:** Python 3.10、setuptools、Docker Compose v2、PaddleOCR、XeLaTeX、pytest。
 
@@ -57,16 +57,15 @@
 - [ ] 运行 `docker compose build worker`。
 - [ ] 提交：`refactor: 集中 Docker 构建入口`。
 
-### Task 3: 按职责归类流水线模块
+### Task 3: 稳定生产包边界
 
 **Files:**
-- Move: 识别、优化、监控模块到 `pipeline/recognition`、`pipeline/optimization`、`pipeline/monitoring`
-- Modify: 包内相对导入、CLI 注册、测试路径、监控命令文档
+- Keep: 生产模块位于 `pipeline/texopt/`
+- Modify: 包说明和测试路径
 
-- [ ] 先为每个目标包增加 `__init__.py`，再逐组移动模块。
-- [ ] 保持现有公开命令和 Python 导入兼容。
-- [ ] 运行识别、优化、监控三组测试。
-- [ ] 提交：`refactor: 按职责整理流水线模块`。
+- [x] 保持现有公开命令和 Python 导入兼容。
+- [x] 将测试移至 `pipeline/tests/unit/`，将 Docker 入口移至 `pipeline/docker/`。
+- [x] 运行 Python 编译检查和 Compose 配置检查。
 
 ### Task 4: 删除重复入口并更新文档
 
