@@ -9,7 +9,7 @@ PDFToTex 只保留当前生产链路：视觉识别、方向检测、TeX 生成�
 ```text
 PDFToTex/
 ├── Lexoid/                 # 视觉识别核心 Python 包
-├── pipeline/               # PDF -> TeX 流水线 Python 包（安装名 texopt）
+├── pipeline/               # PDF -> TeX 流水线 Python 包（分发名 pdftotex-pipeline，导入名 texopt）
 │   ├── __init__.py
 │   ├── cli.py              # texopt 命令入口
 │   ├── stages.py           # 阶段编排和状态推进

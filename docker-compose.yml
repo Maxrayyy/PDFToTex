@@ -4,7 +4,7 @@ services:
   worker:
     build:
       context: .
-      dockerfile: lexiod-pipeline/Dockerfile.hybrid
+      dockerfile: lexiod-pipeline/docker/Dockerfile.hybrid
       target: runtime
       args:
         BASE_RUNTIME_IMAGE: ${BASE_RUNTIME_IMAGE:-pdftotex-runtime:local}
@@ -37,7 +37,7 @@ services:
   tests:
     build:
       context: .
-      dockerfile: lexiod-pipeline/Dockerfile.hybrid
+      dockerfile: lexiod-pipeline/docker/Dockerfile.hybrid
       target: test
       args:
         BASE_RUNTIME_IMAGE: ${BASE_RUNTIME_IMAGE:-pdftotex-runtime:local}

@@ -4,7 +4,7 @@
 
 **Goal:** 将流水线目录收敛为职责清晰的 `pipeline/` 与 `docker/` 结构，同时保持现有 PDF 转 TeX、JSON、监控和容器命令兼容。
 
-**Architecture:** Python 流水线代码统一作为 `texopt` 包安装，但源码目录提升为项目级 `pipeline/`；识别、优化、监控模块按职责分组。Docker 文件集中到 `docker/`，根 Compose 作为唯一生产入口。
+**Architecture:** Python 流水线源码使用 `texopt` 导入名，分发名为 `pdftotex-pipeline`，源码目录提升为项目级 `pipeline/`；识别、优化、监控模块按职责分组。Docker 文件集中到 `docker/`，根 Compose 作为唯一生产入口。
 
 **Tech Stack:** Python 3.10、setuptools、Docker Compose v2、PaddleOCR、XeLaTeX、pytest。
 
