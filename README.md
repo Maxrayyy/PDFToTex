@@ -72,7 +72,7 @@ flowchart TD
 
 当前队列同一时刻只处理一份 PDF。主模型与升级模型共享单容器视觉并发额度 2，协调并发为 2；多个容器的额度分别计算。一个 PDF 失败时队列暂停，后续 PDF 保持待处理。
 
-早期方案使用 PaddleOCR 文本识别、独立布局模型和裁片表格识别，拓扑不完整时使用 PaddleOCR-VL。对比后选择纯视觉路线，随后增加 Sol 主识别、GPT-6 问题页升级、本地规范化与延后命名。`RECOGNITION_OCR=paddleocr` 仍可启用可选 OCR 路线。历史试验位于 `../data/benchmarks/2026-09-05/`，迁移、排除清单和审计位于 `../data/audits/`；历史文档中的容器状态不是实时状态。
+当前识别链路使用视觉模型逐页读取 PDF；Paddle/PaddleX 仅用于页面方向检测。识别结果、问题页升级、字段协调、优化和 XeLaTeX 编译均在同一条 PDF→TeX 流水线中完成。
 
 ## 3. 项目结构与数据存储
 
@@ -97,7 +97,7 @@ lexiod/
     monitoring/realtime/             实时监控
     monitoring/daily/                日报与费用统计
     .cache/semantic-names.sqlite3     共享语义命名缓存
-    audits/、benchmarks/              审计与试验记录
+    audits/                          审计记录
 ```
 
 ### 3.1 Docker 挂载
@@ -108,7 +108,7 @@ lexiod/
 | `../data` | `/data`，可写 | 结果、工作区、队列、监控、缓存 |
 | `./scripts` | `/opt/pdftotex`，只读 | 主仓库管理的队列与续跑脚本 |
 | `lexiod-refactor_paddle-cache` 命名卷 | `/root/.paddle` | Paddle 缓存 |
-| `lexiod-u2-paddlex-cache` 外部命名卷 | `/root/.paddlex` | PaddleX 模型，通常在 `official_models/` |
+| `lexiod-u2-paddlex-cache` 外部命名卷 | `/root/.paddlex` | 页面方向检测模型缓存 |
 | `lexiod-refactor_huggingface-cache` 命名卷 | `/root/.cache/huggingface` | Hugging Face 模型缓存 |
 
 删除容器不删除上述宿主机文件，重建镜像也不清空命名卷。运行脚本随总项目一起克隆，通过只读挂载提供给容器，工作结果写入 `/data`。
@@ -150,7 +150,7 @@ data/optimized/U1/批次数据/A37Z201202602014/BP-C3152R_20260805_132837.tex
 
 ## 4. 环境与配置
 
-需要已启动的 Docker Desktop、Docker Compose v2、可用的模型 API，以及本机 Python 3（监控使用标准库）。当前 Dockerfile 基于本机已有的 `lexiod-texopt:u1` 依赖镜像，其中包含 CPU PaddleOCR 和 XeLaTeX，不能在缺少基础镜像时直接从零构建。
+需要已启动的 Docker Desktop、Docker Compose v2、可用的模型 API，以及本机 Python 3（监控使用标准库）。当前 Dockerfile 基于本机已有的 `lexiod-texopt:u1` 依赖镜像，其中包含页面方向检测运行时和 XeLaTeX，不能在缺少基础镜像时直接从零构建。
 
 ```bash
 docker version
@@ -177,7 +177,7 @@ TEXOPT_SEMANTIC_NAMING=deferred
 
 | 参数 | 当前用途与默认行为 |
 | --- | --- |
-| `RECOGNITION_OCR` | Compose 默认 `none`，可选 `paddleocr` |
+| `RECOGNITION_OCR` | 固定为 `none`；正文识别只使用视觉模型，Paddle 仅负责方向检测 |
 | `RENDER_DPI` / `RETRY_DPI` | 默认 `240` / `480` |
 | `VISION_CONCURRENCY` | Compose 默认 `4`，当前队列必须显式设置为 `2` |
 | `RECONCILE_CONCURRENCY` | 默认 `2` |
@@ -399,16 +399,7 @@ docker compose run --rm --no-deps worker texopt name-fields \
 
 命名验证 TEX、计划与 JSON 哈希，按稳定 ID 补充名称。缓存使用本地 SQLite，不放到不支持 SQLite 锁的网络共享目录。`name_status=complete` 只表示名称已生成，不表示业务数据已经核验。
 
-可选 PaddleOCR 路线可提前下载并验证权重，纯视觉路线通常无需执行：
-
-```bash
-docker compose run --rm --no-deps worker python /opt/lexiod-tools/prefetch_models.py \
-  --manifest /data/.cache/model-cache-manifest.json
-docker compose run --rm --no-deps worker python /opt/lexiod-tools/prefetch_models.py \
-  --manifest /data/.cache/model-cache-manifest.json --verify-only
-```
-
-哈希清单位于宿主机 `data/.cache/model-cache-manifest.json`，预热时需显式传入上面的 `--manifest` 路径。预热不加载推理模型，缓存省去下载时间，进程启动仍要加载权重。Linux ARM64 CPU 兼容处理位于 `lexoid.core.paddle_runtime`。当前未设置单容器内存上限，仍受 Docker Desktop 全局内存和 swap 限制。
+方向检测模型缓存由容器启动时按现有缓存加载；首次运行需要网络访问以完成模型准备。当前未设置单容器内存上限，仍受 Docker Desktop 全局内存和 swap 限制。
 
 ## 10. 常见问题与备份
 
