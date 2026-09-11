@@ -136,14 +136,14 @@ def prepare_layout(source, evidence, profiles=None):
         body = body.lstrip("\r\n")
         marker = PAGE_COMPLETED.search(body)
         width, height = sizes[number - 1]
-        profile = protexopt.get(number, 0)
+        profile = profiles.get(number, 0)
         if profile not in (0, 1, 2):
             raise ValueError("Unknown page layout profile")
         start = rf"\LexoidPageStart{{{number}}}{{{width:g}bp}}{{{height:g}bp}}{{{profile}}}" + "\n"
         end = rf"\LexoidPageEnd{{{number}}}" + "\n"
         chunks.append(prefix + start + body[:marker.start()].rstrip() + "\n" + end + body[marker.start():])
     report = {"schema": "page-layout/v1", "ok": False, "expected_pages": total,
-              "expected_sizes": sizes, "profiles": {str(p): protexopt.get(p, 0) for p in range(1, total + 1)}}
+              "expected_sizes": sizes, "profiles": {str(p): profiles.get(p, 0) for p in range(1, total + 1)}}
     return "".join(chunks), report
 
 

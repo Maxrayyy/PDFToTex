@@ -860,9 +860,9 @@ def cmd_optimise(a: argparse.Namespace) -> int:
                         if p.get("start") != p["source_page"] or p.get("end") != p["source_page"]), None)
             if bad is None and layout_report.get("outside_pages"):
                 bad = layout_report["outside_pages"][0]
-            if bad is None or protexopt.get(bad, 0) >= 2:
+            if bad is None or profiles.get(bad, 0) >= 2:
                 break
-            profiles[bad] = protexopt.get(bad, 0) + 1
+            profiles[bad] = profiles.get(bad, 0) + 1
             out, layout_report = prepare_layout(out, layout_evidence, profiles)
             write_utf8_atomic(a.output, out)
             _event("LAYOUT_RETRY", "retrying bounded spacing adjustment",

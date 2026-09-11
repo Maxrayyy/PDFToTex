@@ -30,7 +30,7 @@ JSON 保留 `needs_review`、`review_status: deferred` 和 `review_reasons`，�
 自动复核数 `selected` 与人工核对数 `deferred`。需要全面内容复核时可显式传入
 `--review-content`。此策略不关闭表格结构检查、语法修复或最终 XeLaTeX 编译。
 
-流水线镜像定义保存在本仓库的 `Dockerfile.hybrid`，构建上下文为同时包含
+流水线镜像定义保存在本仓库的 `pipeline/docker/Dockerfile.hybrid`，构建上下文为同时包含
 `Lexoid/` 和 `pipeline/` 的父目录。基础镜像为现有的 `pdftotex-runtime:local`；
 删除线所需的 CTAN `ulem.sty` 通过固定 SHA-256 校验值安装。运行镜像构建命令：
 

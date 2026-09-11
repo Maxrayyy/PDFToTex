@@ -87,7 +87,7 @@ lexiod/
       resume-none/run.py              旧识别缓存续跑工具
     Lexoid/                          识别器独立仓库
     pipeline/                  优化与流水线源码（纳入总仓库）
-      Dockerfile.hybrid               运行/测试镜像
+      docker/                          Dockerfile 和 Compose 入口
       texopt/                          texopt、流水线、监控脚本
   data/
     optimized/<单位>/<类别>/<批次>/   正式发布 TEX
