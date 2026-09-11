@@ -441,7 +441,7 @@ p076-dimension_inspection_record-outer_diameter_measured
 ### 8.1 audit
 
 ```bash
-python -m texopt.cli audit input.tex --report audit.json
+python -m texopt.optimization.cli audit input.tex --report audit.json
 ```
 
 输出：
@@ -458,7 +458,7 @@ python -m texopt.cli audit input.tex --report audit.json
 ### 8.2 optimise
 
 ```bash
-python -m texopt.cli optimise input.tex -o input.opt.tex \
+python -m texopt.optimization.cli optimise input.tex -o input.opt.tex \
   --registry fields.json \
   --report report.json \
   --diff opt.diff
@@ -467,7 +467,7 @@ python -m texopt.cli optimise input.tex -o input.opt.tex \
 也可以分别指定导出目录和文件名：
 
 ```bash
-python -m texopt.cli optimise input.tex \
+python -m texopt.optimization.cli optimise input.tex \
   --output-dir ./exports \
   --output-name customer-form.optimized.tex \
   --registry ./exports/fields.json
@@ -479,7 +479,7 @@ python -m texopt.cli optimise input.tex \
 桌面环境也可以打开系统“另存为”窗口，同时选择目录和文件名：
 
 ```bash
-python -m texopt.cli optimise input.tex --choose-output
+python -m texopt.optimization.cli optimise input.tex --choose-output
 ```
 
 ### 实时日志
@@ -487,7 +487,7 @@ python -m texopt.cli optimise input.tex --choose-output
 `optimise` 默认在输出 TeX 旁生成 `<输出名>.texopt.log`，也可以自定义：
 
 ```bash
-python -m texopt.cli optimise input.tex \
+python -m texopt.optimization.cli optimise input.tex \
   --output-dir ./exports \
   --output-name result.tex \
   --log-file ./exports/result.optimizer.log
@@ -564,7 +564,7 @@ strict 默认行为：
 ```bash
 xelatex -synctex=1 -interaction=nonstopmode input.opt.tex
 
-python -m texopt.cli verify input.opt.tex input.opt.pdf \
+python -m texopt.optimization.cli verify input.opt.tex input.opt.pdf \
   --registry fields.json \
   --baseline-pdf input.orig.pdf \
   --check-geometry
