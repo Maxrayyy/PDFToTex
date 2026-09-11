@@ -27,7 +27,7 @@ def discover_pdfs(source_root: Path) -> list[Path]:
         relative = path.relative_to(source_root)
         if path.name.startswith("._") or any(part.startswith(".") for part in relative.parts):
             continue
-        texopt.append(path)
+        files.append(path)
     return sorted(files, key=lambda path: str(path.relative_to(source_root)))
 
 
