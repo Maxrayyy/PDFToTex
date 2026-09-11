@@ -186,7 +186,7 @@ TEXOPT_SEMANTIC_NAMING=deferred
 | `PIPELINE_PUBLISH_ROOT` | 正式 TEX 根目录，队列模式设置到当前批次 |
 | `TEXOPT_NAME_CACHE` | 默认 `/data/.cache/semantic-names.sqlite3` |
 
-优先级为 `docker compose run -e` 高于 Compose `environment`，再高于 `env_file`。例如仅在 `files/.env` 设置视觉并发为 2，不能覆盖 Compose 的默认 4，下面的命令显式使用 `-e`。代码或环境改变后需重建镜像/重建容器，`docker start` 仍使用旧容器配置。
+优先级为 `docker compose run -e` 高于 Compose `environment`，再高于 `env_file`。例如仅在 `files/.env` 设置视觉并发为 2，不能覆盖 Compose 的默认 4，下面的命令显式使用 `-e`。代码或环境改变后需重建镜像/重建容器，`docker start` 仍使用旧容器配置。修改 Lexoid 依赖后，使用 `./scripts/update-lock.sh` 自动创建或复用 Poetry 环境并重生成锁文件。
 
 ## 5. Docker 构建与启动
 
