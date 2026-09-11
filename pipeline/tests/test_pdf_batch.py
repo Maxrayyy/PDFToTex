@@ -1,7 +1,7 @@
 import errno
 from pathlib import Path
 
-from texopt.pdf_batch import (
+from texopt.runtime.pdf_batch import (
     build_lexoid_command,
     build_optimizer_command,
     discover_pdfs,

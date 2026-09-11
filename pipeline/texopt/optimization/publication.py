@@ -8,9 +8,9 @@ import json
 from pathlib import Path
 import shutil
 
-from ..pdf_batch import discover_pdfs
-from ..stages import artifact_paths, sha256_file
-from ..textio import write_utf8_atomic
+from ..runtime.pdf_batch import discover_pdfs
+from ..runtime.stages import artifact_paths, sha256_file
+from ..core.textio import write_utf8_atomic
 
 
 def migrate_exports(source_root, work_root, publish_root):

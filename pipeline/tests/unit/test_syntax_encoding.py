@@ -11,7 +11,7 @@ from texopt.optimization.cli import _compile_latex, remove_explicit_sync_anchors
 from texopt.optimization.preamble import inject
 from texopt.optimization.syntax_check import validate_latex
 from texopt.optimization.syntax_repair import normalize_math_blank_lines
-from texopt.textio import read_text_auto, write_utf8_atomic
+from texopt.core.textio import read_text_auto, write_utf8_atomic
 
 
 class EncodingTests(unittest.TestCase):

@@ -20,10 +20,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
-from .recognition.json_extractor import extract_fields, write_json
+from ..recognition.json_extractor import extract_fields, write_json
 from .pipeline_state import PipelineState
-from .model_config import resolve_model
-from .textio import read_text_auto, write_utf8_atomic
+from ..core.model_config import resolve_model
+from ..core.textio import read_text_auto, write_utf8_atomic
 
 
 PAGE_COMPLETED = re.compile(

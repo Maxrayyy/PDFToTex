@@ -11,7 +11,7 @@ from pathlib import Path
 from lexoid.cli import LATEX_CHECKBOX_FIELD_COMMAND
 from texopt.recognition.json_extractor import extract_fields
 from texopt.optimization.preamble import BLOCK
-from texopt.patch_lexoid_checkbox_prompt import (
+from texopt.runtime.patch_lexoid_checkbox_prompt import (
     CHECKBOX_RULES,
     NEW_TABLE_RULE,
     patch_source,

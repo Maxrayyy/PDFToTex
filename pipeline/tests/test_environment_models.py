@@ -3,7 +3,7 @@ import pytest
 from texopt.recognition.lexoid_job import new_job
 from texopt.optimization.llm import LLMBatchNamer
 from texopt.optimization.reconcile import FieldReconcileAdapter
-from texopt.stages import BatchConfig, build_stage_commands
+from texopt.runtime.stages import BatchConfig, build_stage_commands
 from texopt.optimization.syntax_repair import LLMSyntaxRepairer
 
 

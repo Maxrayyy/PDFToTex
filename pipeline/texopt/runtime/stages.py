@@ -14,8 +14,8 @@ import subprocess
 import time
 
 from .pipeline_state import PipelineState
-from .model_config import resolve_model
-from .textio import write_utf8_atomic
+from ..core.model_config import resolve_model
+from ..core.textio import write_utf8_atomic
 
 
 class ModelServicePaused(RuntimeError):
@@ -205,7 +205,7 @@ def _publish(source, destination):
 def run_batch(source_root, output_root, config=None, runner=None, page_counter=None, include=None,
               *, include_paths=None):
     from .pdf_batch import _page_count, discover_pdfs
-    from .model_telemetry import summarize_calls
+    from ..core.model_telemetry import summarize_calls
 
     source_root, output_root = Path(source_root).resolve(), Path(output_root).resolve()
     config = config or BatchConfig.from_env()

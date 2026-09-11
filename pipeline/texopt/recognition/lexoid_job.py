@@ -17,7 +17,7 @@ import time
 from dataclasses import dataclass, asdict, field
 from pathlib import Path, PurePosixPath
 from typing import Dict, List, Optional, Tuple
-from ..model_config import resolve_model
+from ..core.model_config import resolve_model
 
 # --------------------------------------------------------------------------- #
 # job model

@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 import pytest
 
-from texopt.stages import BatchConfig, artifact_paths, build_stage_commands, run_batch
+from texopt.runtime.stages import BatchConfig, artifact_paths, build_stage_commands, run_batch
 
 
 def test_artifacts_preserve_category_number_and_separate_tex_directories(tmp_path):
@@ -153,7 +153,7 @@ def test_placeholder_never_publishes_even_with_successful_compile(tmp_path, bad_
 
 
 def test_publish_rejects_placeholder_but_allows_recognized_blank_page(tmp_path):
-    from texopt.stages import _publish
+    from texopt.runtime.stages import _publish
     source, target = tmp_path / "source.tex", tmp_path / "public.tex"
     source.write_text("% LEXOID_RECOGNITION_FALLBACK\n\\null\n% LEXOID_PAGE_COMPLETED: 1/1\n")
     with pytest.raises(ValueError, match="recognition"):

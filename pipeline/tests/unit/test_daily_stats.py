@@ -6,7 +6,7 @@ import sqlite3
 from unittest.mock import patch
 
 from texopt.monitoring.daily_stats import ZONE, call_summary, install, poll
-from texopt.pipeline_state import SCHEMA
+from texopt.runtime.pipeline_state import SCHEMA
 
 
 def event(call_id, *, at="2026-09-07T01:00:00+00:00", usage=None, attempt=1, status="ok"):

@@ -31,13 +31,13 @@ import os
 import re
 import urllib.error
 import urllib.request
-from ..model_telemetry import request_json
+from ..core.model_telemetry import request_json
 from dataclasses import dataclass, field as dc_field, asdict
 from pathlib import Path
 from typing import Dict, List, Optional, Protocol
 
 from .fields import is_hashy, slug, tex_to_plain
-from ..model_config import resolve_model
+from ..core.model_config import resolve_model
 from .tex_tables import _read_balanced, _skip_ws, mask_comments
 from .naming_cache import NamingCache, is_sqlite_lock_error
 
