@@ -108,7 +108,7 @@ lexiod/
 | `../data` | `/data`，可写 | 结果、工作区、队列、监控、缓存 |
 | `./scripts` | `/opt/pdftotex`，只读 | 主仓库管理的队列与续跑脚本 |
 | `pdftotex_paddle-cache` 命名卷 | `/root/.paddle` | Paddle 缓存 |
-| `lexiod-u2-paddlex-cache` 外部命名卷 | `/root/.paddlex` | 页面方向检测模型缓存 |
+| `pdftotex-paddlex-cache` 外部命名卷 | `/root/.paddlex` | 页面方向检测模型缓存 |
 
 删除容器不删除上述宿主机文件，重建镜像也不清空命名卷。运行脚本随总项目一起克隆，通过只读挂载提供给容器，工作结果写入 `/data`。
 
@@ -155,10 +155,10 @@ data/optimized/U1/批次数据/A37Z201202602014/BP-C3152R_20260805_132837.tex
 docker version
 docker compose version
 docker image inspect lexiod-texopt:u1 --format '{{.Id}}'
-docker volume inspect lexiod-u2-paddlex-cache --format '{{.Name}}'
+docker volume inspect pdftotex-paddlex-cache --format '{{.Name}}'
 ```
 
-新机器需先导入该依赖镜像，或用 `BASE_RUNTIME_IMAGE` 指定兼容基础镜像。首次部署且确认外部缓存卷不存在时，可执行 `docker volume create lexiod-u2-paddlex-cache` 创建空卷；它不包含已有权重。
+新机器需先导入该依赖镜像，或用 `BASE_RUNTIME_IMAGE` 指定兼容基础镜像。首次部署且确认外部缓存卷不存在时，可执行 `docker volume create pdftotex-paddlex-cache` 创建空卷；它不包含已有权重。
 
 Compose 依次读取 `Lexoid/.env`、`lexiod-pipeline/files/.env`，后者覆盖前者同名项。`lexiod-pipeline/.env` 属于另一个入口，不由当前 Compose 的 `env_file` 自动加载。新部署参考 [files/.env.example](lexiod-pipeline/files/.env.example)，已有配置不要用模板覆盖。
 

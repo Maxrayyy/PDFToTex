@@ -47,4 +47,4 @@ volumes:
   paddle-cache:
   paddlex-cache:
     external: true
-    name: lexiod-u2-paddlex-cache
+    name: pdftotex-paddlex-cache
