@@ -1,0 +1,11 @@
+# 核心流水线：纯标准库，无第三方依赖
+#
+# 外部命令（不是 pip 包）：
+#   xelatex   -- 编译与探针测量（TeX Live / MacTeX）
+#   synctex   -- 定位往返校验（随 TeX Live 提供）
+#   pdftotext -- 内容与几何回归（poppler-utils）
+#   docker    -- 运行 lexoid
+#
+# 大模型命名走 urllib 直连 api.anthropic.com，不需要 anthropic SDK。
+# 只需设置环境变量：
+#   export ANTHROPIC_API_KEY=...

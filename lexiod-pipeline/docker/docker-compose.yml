@@ -1,0 +1,30 @@
+services:
+  # ── Lexoid PDF→LaTeX service ─────────────────────────────
+  # Invoked on-demand via:  docker compose run --rm lexoid latex ...
+  # Not started by `docker compose up`.
+  lexoid:
+    image: ${LEXOID_IMAGE:-pdftotex:local}
+    volumes:
+      - ${HOST_WORK_DIR:-~/Downloads}:/data
+    # No ports, no restart policy — ephemeral worker only.
+
+  # ── Streamlit web UI ─────────────────────────────────────
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    ports:
+      - "${STREAMLIT_PORT:-8501}:8501"
+    volumes:
+      # Project code (live-reload during development)
+      - ./:/app
+      # User's working directory for file I/O
+      - ${WORK_DIR:-~/Downloads}:/data
+      # Docker socket — allows launching sibling lexoid containers
+      - /var/run/docker.sock:/var/run/docker.sock
+    env_file: .env
+    environment:
+      # Inside the container the workdir is /data;
+      # HOST_WORK_DIR is passed through for building docker compose -v flags.
+      - CONTAINER_WORK_DIR=/data
+    restart: unless-stopped

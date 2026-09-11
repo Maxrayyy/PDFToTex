@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+.git/
+.DS_Store
+.texopt-probe/
+data/
+.env

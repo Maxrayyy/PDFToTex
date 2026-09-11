@@ -1,0 +1,20 @@
+{
+  "currency": "USD",
+  "tokens_per_unit": 1000000,
+  "source": "用户提供的价格表，2026-09-07；按每百万 token 解释",
+  "long_context_above_tokens": 272000,
+  "models": {
+    "gpt-6-astra": {
+      "short": {"input": "10.00", "cached_input": "1.00", "cache_write": "12.50", "output": "50.00"},
+      "long": {"input": "20.00", "cached_input": "2.00", "cache_write": "25.00", "output": "75.00"}
+    },
+    "gpt-5.6-sol": {
+      "short": {"input": "4.00", "cached_input": "0.40", "cache_write": "5.00", "output": "20.00"},
+      "long": {"input": "8.00", "cached_input": "0.80", "cache_write": "10.00", "output": "30.00"}
+    },
+    "gpt-5.6-terra": {
+      "short": {"input": "2.00", "cached_input": "0.20", "cache_write": "2.50", "output": "12.00"},
+      "long": {"input": "4.00", "cached_input": "0.40", "cache_write": "5.00", "output": "18.00"}
+    }
+  }
+}

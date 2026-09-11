@@ -1,0 +1,37 @@
+# Build from the parent workspace containing Lexoid and lexiod-pipeline.
+ARG BASE_RUNTIME_IMAGE=pdftotex-runtime:local
+FROM ${BASE_RUNTIME_IMAGE} AS runtime
+
+ENTRYPOINT []
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True \
+    PADDLE_HOME=/root/.paddle \
+    OMP_NUM_THREADS=2
+
+# The local dependency image already includes CPU PaddleOCR and XeLaTeX.
+# Pin the standalone CTAN macro used for crossed-out source values.
+ADD --checksum=sha256:c97c15736b46cf13071c52070c07aa933fc8253748422d0df56e97286b563685 \
+    https://mirrors.ctan.org/macros/latex/contrib/ulem/ulem.sty \
+    /usr/local/share/texmf/tex/generic/ulem/ulem.sty
+RUN mktexlsr /usr/local/share/texmf
+
+# Install both refactored packages; no source is taken from the old containers.
+COPY Lexoid/pyproject.toml Lexoid/README.md /src/Lexoid/
+COPY Lexoid/lexoid /src/Lexoid/lexoid
+COPY lexiod-pipeline/texopt /src/texopt
+RUN python -m pip install 'pylatexenc>=2.10,<3' \
+    && python -m pip install --no-deps /src/Lexoid /src/texopt \
+    && python -m pip uninstall -y poetry-plugin-export \
+    && python -m pip check
+
+WORKDIR /data
+CMD ["texopt-pipeline", "--once"]
+
+FROM runtime AS test
+RUN python -m pip install pytest pytest-asyncio
+COPY Lexoid/tests /tests/lexoid
+COPY lexiod-pipeline /tests/pipeline
+ENV PYTHONPATH=/tests/pipeline
+WORKDIR /tests/run
+CMD ["python", "-m", "pytest", "-q", "/tests/pipeline/texopt", "/tests/pipeline/tests", "/tests/lexoid", "--ignore=/tests/lexoid/test_cli.py", "--ignore=/tests/lexoid/test_parser.py", "--ignore=/tests/lexoid/test_web_parsing.py"]

@@ -1,0 +1,19 @@
+# Pipeline runtime artefacts
+.pipeline-state/
+.pipeline-logs/
+.pipeline-*.json
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
