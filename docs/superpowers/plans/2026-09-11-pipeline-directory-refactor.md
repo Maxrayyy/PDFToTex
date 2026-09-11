@@ -22,20 +22,20 @@
 ### Task 0: 解除流水线嵌套 Git 归属
 
 **Files:**
-- Modify: 父仓库索引 `lexiod-pipeline`
-- Remove: `lexiod-pipeline/.git`
+- Modify: 父仓库索引 `pipeline`
+- Remove: `pipeline/.git`
 
-- [ ] 记录 `lexiod-pipeline` 当前 HEAD 和远程地址，确保历史可追溯。
-- [ ] 在父仓库执行 `git rm --cached` 移除 `lexiod-pipeline` submodule 索引项，保留工作树文件。
-- [ ] 删除 `lexiod-pipeline/.git` 元数据，不删除源码和数据文件；保留 `Lexoid/.git` 不变。
-- [ ] 将 `lexiod-pipeline` 作为普通目录加入父仓库，并检查 `.gitignore` 不会纳入密钥、缓存和生成产物。
+- [ ] 记录 `pipeline` 当前 HEAD 和远程地址，确保历史可追溯。
+- [ ] 在父仓库执行 `git rm --cached` 移除 `pipeline` submodule 索引项，保留工作树文件。
+- [ ] 删除 `pipeline/.git` 元数据，不删除源码和数据文件；保留 `Lexoid/.git` 不变。
+- [ ] 将 `pipeline` 作为普通目录加入父仓库，并检查 `.gitignore` 不会纳入密钥、缓存和生成产物。
 - [ ] 运行 `git ls-files --stage`，确认不再出现模式 `160000`。
 - [ ] 提交：`refactor: 纳入流水线源码到总仓库`。
 
 ### Task 1: 完成 texopt 包目录迁移
 
 **Files:**
-- Rename: `lexiod-pipeline/texopt/` -> `pipeline/`
+- Rename: `pipeline/texopt/` -> `pipeline/`
 - Modify: `Dockerfile.hybrid`, `Dockerfile.streamlit`, `app.py`, `tests/*.py`
 - Test: `pipeline/test_*.py`, `tests/test_*.py`
 

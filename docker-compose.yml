@@ -4,14 +4,14 @@ services:
   worker:
     build:
       context: .
-      dockerfile: lexiod-pipeline/docker/Dockerfile.hybrid
+      dockerfile: pipeline/docker/Dockerfile.hybrid
       target: runtime
       args:
         BASE_RUNTIME_IMAGE: ${BASE_RUNTIME_IMAGE:-pdftotex-runtime:local}
     image: pdftotex:local
     env_file:
       - Lexoid/.env
-      - lexiod-pipeline/texopt/.env
+      - pipeline/texopt/.env
     environment:
       PDF_SOURCE_ROOT: /input
       PIPELINE_OUTPUT_ROOT: /data
@@ -37,7 +37,7 @@ services:
   tests:
     build:
       context: .
-      dockerfile: lexiod-pipeline/docker/Dockerfile.hybrid
+      dockerfile: pipeline/docker/Dockerfile.hybrid
       target: test
       args:
         BASE_RUNTIME_IMAGE: ${BASE_RUNTIME_IMAGE:-pdftotex-runtime:local}

@@ -38,8 +38,8 @@ PDFToTex/
 
 ## Git 归属
 
-当前 `Lexoid/` 和 `lexiod-pipeline/` 都是父仓库中的 Git submodule（模式 `160000`），并分别保留独立远程仓库。本次只解除 `lexiod-pipeline` 的嵌套 Git；`Lexoid/` 保留 `.git` 和独立远程仓库。迁移顺序为：记录流水线子仓库最后提交号，再从父仓库索引移除 `lexiod-pipeline`，删除其目录内 `.git`，将目录内容作为普通文件重新加入父仓库。迁移完成后流水线由总项目统一提交，Lexoid 仍可独立提交。
+当前 `Lexoid/` 和 `pipeline/` 都是父仓库中的 Git submodule（模式 `160000`），并分别保留独立远程仓库。本次只解除 `pipeline` 的嵌套 Git；`Lexoid/` 保留 `.git` 和独立远程仓库。迁移顺序为：记录流水线子仓库最后提交号，再从父仓库索引移除 `pipeline`，删除其目录内 `.git`，将目录内容作为普通文件重新加入父仓库。迁移完成后流水线由总项目统一提交，Lexoid 仍可独立提交。
 
 ## 当前过渡状态
 
-流水线包已从 `lexiod-pipeline/files` 改名为 `lexiod-pipeline/texopt`，后续再将 Docker 入口、监控模块和测试按职责归位到目标目录。
+流水线包已从 `pipeline/files` 改名为 `pipeline/texopt`，后续再将 Docker 入口、监控模块和测试按职责归位到目标目录。

@@ -4,7 +4,7 @@
 
 本文按 2026-09-09 的代码与本机部署整理。当前采用纯视觉识别、按页升级、字段协调和 TEX 优化编译，通过 Docker 容器顺序处理指定批次。宿主机为 macOS / Apple Silicon，容器为 Linux ARM64 CPU 环境，视觉模型通过远程 API 调用。
 
-总项目通过 Git submodule 管理两个独立仓库：`Lexoid` 为识别器，`lexiod-pipeline` 为优化器与流水线。Compose 项目名和镜像名为 `pdftotex`。
+总项目通过 Git submodule 管理两个独立仓库：`Lexoid` 为识别器，`pipeline` 为优化器与流水线。Compose 项目名和镜像名为 `pdftotex`。
 
 ## 获取项目
 
@@ -35,8 +35,8 @@ git submodule status
 | 查编译 PDF、识别证据、日志和缓存 | [data/workers](../data/workers/) |
 | 查看批次清单及完成记录 | [data/workers/queues](../data/workers/queues/) |
 | 调整 Docker 服务、环境和挂载 | [docker-compose.yml](docker-compose.yml) |
-| 查看按页升级细节 | [PAGE_FALLBACK.md](lexiod-pipeline/texopt/PAGE_FALLBACK.md) |
-| 查看字段命名、优化器命令和历史 cron 模式 | [优化器 README](lexiod-pipeline/texopt/README.md) |
+| 查看按页升级细节 | [PAGE_FALLBACK.md](pipeline/texopt/PAGE_FALLBACK.md) |
+| 查看字段命名、优化器命令和历史 cron 模式 | [优化器 README](pipeline/texopt/README.md) |
 
 除特别注明外，以下命令都从本目录执行：
 
@@ -86,7 +86,7 @@ lexiod/
       run-sequential-queue.py         批次队列入口
       resume-none/run.py              旧识别缓存续跑工具
     Lexoid/                          识别器独立仓库
-    lexiod-pipeline/                  优化与流水线源码（纳入总仓库）
+    pipeline/                  优化与流水线源码（纳入总仓库）
       Dockerfile.hybrid               运行/测试镜像
       texopt/                          texopt、流水线、监控脚本
   data/
@@ -162,7 +162,7 @@ docker volume inspect pdftotex-paddlex-cache --format '{{.Name}}'
 
 新机器需先导入该依赖镜像，或用 `BASE_RUNTIME_IMAGE` 指定兼容基础镜像。首次部署且确认外部缓存卷不存在时，可执行 `docker volume create pdftotex-paddlex-cache` 创建空卷；它不包含已有权重。
 
-Compose 依次读取 `Lexoid/.env`、`lexiod-pipeline/texopt/.env`，后者覆盖前者同名项。`lexiod-pipeline/.env` 属于另一个入口，不由当前 Compose 的 `env_file` 自动加载。新部署参考 [texopt/.env.example](lexiod-pipeline/texopt/.env.example)，已有配置不要用模板覆盖。
+Compose 依次读取 `Lexoid/.env`、`pipeline/texopt/.env`，后者覆盖前者同名项。`pipeline/.env` 属于另一个入口，不由当前 Compose 的 `env_file` 自动加载。新部署参考 [texopt/.env.example](pipeline/texopt/.env.example)，已有配置不要用模板覆盖。
 
 视觉与修复接口使用 `OPENAI_API_KEY`、`OPENAI_BASE_URL`，凭据仅放本地忽略的 `.env`，不写入文档、队列或镜像。当前方案的模型参数为：
 
@@ -290,7 +290,7 @@ docker rm lexiod-new-batch
 
 ### 7.1 入口与展示规则
 
-宿主机运行 [worker_watch.py](lexiod-pipeline/texopt/worker_watch.py)，使用 [realtime/config.json](../data/monitoring/realtime/config.json)。当前通过 macOS `launchd` 每 **360 秒（6 分钟）**检查一次；脚本默认值为 600 秒，实际以配置及加载任务为准。
+宿主机运行 [worker_watch.py](pipeline/texopt/worker_watch.py)，使用 [realtime/config.json](../data/monitoring/realtime/config.json)。当前通过 macOS `launchd` 每 **360 秒（6 分钟）**检查一次；脚本默认值为 600 秒，实际以配置及加载任务为准。
 
 | `data/monitoring/realtime/` 中的文件 | 内容 |
 | --- | --- |
@@ -308,17 +308,17 @@ PDF 清单来自 `data/workers/queues/*.status.json`，只有 `status=done` 且 
 ### 7.2 刷新、安装与停止
 
 ```bash
-python3 lexiod-pipeline/texopt/worker_watch.py once \
+python3 pipeline/texopt/worker_watch.py once \
   --config ../data/monitoring/realtime/config.json
 
 # 任务未加载时安装；安装后立即检查一次
-python3 lexiod-pipeline/texopt/worker_watch.py install \
+python3 pipeline/texopt/worker_watch.py install \
   --config ../data/monitoring/realtime/config.json
 
 launchctl print "gui/$(id -u)/com.lexiod.worker-watch.realtime"
 
 # 只停止监控调度，不停止转换容器
-python3 lexiod-pipeline/texopt/worker_watch.py stop \
+python3 pipeline/texopt/worker_watch.py stop \
   --config ../data/monitoring/realtime/config.json
 
 tail -n 80 ../data/monitoring/realtime/runner.error.log
@@ -360,19 +360,19 @@ tail -n 80 ../data/monitoring/realtime/runner.error.log
 
 ## 8. 每日转换与费用监控
 
-宿主机运行 [daily_stats.py](lexiod-pipeline/texopt/daily_stats.py)，配置为 [daily/config.json](../data/monitoring/daily/config.json)，当前每 **600 秒（10 分钟）**刷新。它只读扫描本地状态、产物和调用日志，不依赖容器仍然存在，也不随转换容器退出而停止。
+宿主机运行 [daily_stats.py](pipeline/texopt/daily_stats.py)，配置为 [daily/config.json](../data/monitoring/daily/config.json)，当前每 **600 秒（10 分钟）**刷新。它只读扫描本地状态、产物和调用日志，不依赖容器仍然存在，也不随转换容器退出而停止。
 
 ```bash
-python3 lexiod-pipeline/texopt/daily_stats.py once \
+python3 pipeline/texopt/daily_stats.py once \
   --config ../data/monitoring/daily/config.json
 
 # 首次安装，同名 LaunchAgent 已存在时不要重复安装
-python3 lexiod-pipeline/texopt/daily_stats.py install \
+python3 pipeline/texopt/daily_stats.py install \
   --config ../data/monitoring/daily/config.json
 
 launchctl print "gui/$(id -u)/com.lexiod.daily-stats"
 
-python3 lexiod-pipeline/texopt/daily_stats.py stop \
+python3 pipeline/texopt/daily_stats.py stop \
   --config ../data/monitoring/daily/config.json
 ```
 
@@ -383,7 +383,7 @@ python3 lexiod-pipeline/texopt/daily_stats.py stop \
 - 完成条件：优化阶段完成、编译成功、生成 PDF 存在，且正式 TEX 与任务产物哈希一致。仅有 TEX 文件不足以计入完成。
 - 按北京时间任务完成日归档，源页数和生成页数分别统计。跨天任务的已记录 token 归到完成日，不等同于接口调用日账单。
 - 调用按 `call_id` 去重，包括识别、升级、协调、优化和重试。并行请求累计耗时不能当作墙钟耗时。
-- 费用由 [model_prices.json](lexiod-pipeline/texopt/model_prices.json) 估算；缺失 usage、未知价格和未计价模型明确标记，不能把未知费用当作零或按 GPT 价格估算 Kimi。
+- 费用由 [model_prices.json](pipeline/texopt/model_prices.json) 估算；缺失 usage、未知价格和未计价模型明确标记，不能把未知费用当作零或按 GPT 价格估算 Kimi。
 - JSON 校验及溢出页数不阻断完成计数，因此日报的“完成”仍需结合 PDF 人工核对。
 
 ## 9. 后续命名与可选模型预热

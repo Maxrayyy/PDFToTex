@@ -1,4 +1,4 @@
-# Build from the parent workspace containing Lexoid and lexiod-pipeline.
+# Build from the parent workspace containing Lexoid and pipeline.
 ARG BASE_RUNTIME_IMAGE=pdftotex-runtime:local
 FROM ${BASE_RUNTIME_IMAGE} AS runtime
 
@@ -19,7 +19,7 @@ RUN mktexlsr /usr/local/share/texmf
 # Install both refactored packages; no source is taken from the old containers.
 COPY Lexoid/pyproject.toml Lexoid/README.md /src/Lexoid/
 COPY Lexoid/lexoid /src/Lexoid/lexoid
-COPY lexiod-pipeline/texopt /src/texopt
+COPY pipeline/texopt /src/texopt
 RUN python -m pip install 'pylatexenc>=2.10,<3' \
     && python -m pip install --no-deps /src/Lexoid /src/texopt \
     && python -m pip uninstall -y poetry-plugin-export \
@@ -31,7 +31,7 @@ CMD ["texopt-pipeline", "--once"]
 FROM runtime AS test
 RUN python -m pip install pytest pytest-asyncio
 COPY Lexoid/tests /tests/lexoid
-COPY lexiod-pipeline /tests/pipeline
+COPY pipeline /tests/pipeline
 ENV PYTHONPATH=/tests/pipeline
 WORKDIR /tests/run
 CMD ["python", "-m", "pytest", "-q", "/tests/pipeline/tests/unit", "/tests/pipeline/tests", "/tests/lexoid", "--ignore=/tests/lexoid/test_cli.py", "--ignore=/tests/lexoid/test_parser.py", "--ignore=/tests/lexoid/test_web_parsing.py"]

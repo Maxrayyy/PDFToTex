@@ -50,7 +50,7 @@ docker compose run --rm worker
 单次监控检查：
 
 ```bash
-python3 lexiod-pipeline/texopt/worker_watch.py once \\
+python3 pipeline/texopt/worker_watch.py once \\
   --config "$(pwd)/../data/monitoring/realtime/config.json"
 ```
 
@@ -66,5 +66,5 @@ cat ../data/monitoring/realtime/latest.md
 git status --short
 git diff --check
 git -C Lexoid status --short
-git -C lexiod-pipeline status --short
+git -C pipeline status --short
 ```
