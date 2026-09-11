@@ -9,12 +9,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from .lexoid_job import new_job, resume_argv
-from .pipeline_daemon import (Config, FolderWorker, env_bool, last_completed_page,
+from texopt.lexoid_job import new_job, resume_argv
+from texopt.pipeline_daemon import (Config, FolderWorker, env_bool, last_completed_page,
                               merge_lexoid_resume, mirrored_log, relative_source,
                               prepare_partial_for_resume, resume_page_after,
                               write_done_marker)
-from .pipeline_state import PipelineState
+from texopt.pipeline_state import PipelineState
 
 
 class PipelineStateTests(unittest.TestCase):

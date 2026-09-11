@@ -34,4 +34,4 @@ COPY Lexoid/tests /tests/lexoid
 COPY lexiod-pipeline /tests/pipeline
 ENV PYTHONPATH=/tests/pipeline
 WORKDIR /tests/run
-CMD ["python", "-m", "pytest", "-q", "/tests/pipeline/texopt", "/tests/pipeline/tests", "/tests/lexoid", "--ignore=/tests/lexoid/test_cli.py", "--ignore=/tests/lexoid/test_parser.py", "--ignore=/tests/lexoid/test_web_parsing.py"]
+CMD ["python", "-m", "pytest", "-q", "/tests/pipeline/tests/unit", "/tests/pipeline/tests", "/tests/lexoid", "--ignore=/tests/lexoid/test_cli.py", "--ignore=/tests/lexoid/test_parser.py", "--ignore=/tests/lexoid/test_web_parsing.py"]

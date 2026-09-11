@@ -3,7 +3,7 @@ import time
 
 import pytest
 
-from . import naming_cache
+from texopt import naming_cache
 
 
 @pytest.mark.parametrize("message", ["database is locked", "database table is locked"])

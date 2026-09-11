@@ -6,14 +6,14 @@ import unittest
 import tempfile
 from pathlib import Path
 
-from .cli import _compile_latex
-from .preamble import inject
-from .syntax_repair import normalize_math_blank_lines
-from .fields import annotate_fields
-from .llm import HeuristicBatchNamer
-from .syntax_check import validate_latex
-from .reconcile import field_segments
-from .tex_tables import transform_tex
+from texopt.cli import _compile_latex
+from texopt.preamble import inject
+from texopt.syntax_repair import normalize_math_blank_lines
+from texopt.fields import annotate_fields
+from texopt.llm import HeuristicBatchNamer
+from texopt.syntax_check import validate_latex
+from texopt.reconcile import field_segments
+from texopt.tex_tables import transform_tex
 
 
 class FieldAnnotationTests(unittest.TestCase):

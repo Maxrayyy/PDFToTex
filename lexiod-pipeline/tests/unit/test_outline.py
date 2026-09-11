@@ -1,6 +1,6 @@
 import re
 
-from .outline import normalize_outline
+from texopt.outline import normalize_outline
 
 
 def document(body):

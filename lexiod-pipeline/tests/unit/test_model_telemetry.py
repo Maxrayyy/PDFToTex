@@ -5,7 +5,7 @@ import urllib.request
 
 import pytest
 
-from .model_telemetry import request_json, summarize_calls
+from texopt.model_telemetry import request_json, summarize_calls
 
 
 def test_provider_usage_counts_retries_and_keeps_unknown_totals(tmp_path, monkeypatch):

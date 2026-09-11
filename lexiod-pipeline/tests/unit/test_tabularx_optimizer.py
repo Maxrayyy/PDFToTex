@@ -8,10 +8,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from .opaque import (convert, find_opaque, instrument,
+from texopt.opaque import (convert, find_opaque, instrument,
                      remove_unused_tabularx_package, run_probe, static_widths)
-from .syntax_check import validate_latex
-from .tex_tables import transform_tex
+from texopt.syntax_check import validate_latex
+from texopt.tex_tables import transform_tex
 
 
 class TabularxWidthTests(unittest.TestCase):

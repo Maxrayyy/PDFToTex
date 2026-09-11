@@ -7,11 +7,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from .cli import _compile_latex, remove_explicit_sync_anchors
-from .preamble import inject
-from .syntax_check import validate_latex
-from .syntax_repair import normalize_math_blank_lines
-from .textio import read_text_auto, write_utf8_atomic
+from texopt.cli import _compile_latex, remove_explicit_sync_anchors
+from texopt.preamble import inject
+from texopt.syntax_check import validate_latex
+from texopt.syntax_repair import normalize_math_blank_lines
+from texopt.textio import read_text_auto, write_utf8_atomic
 
 
 class EncodingTests(unittest.TestCase):

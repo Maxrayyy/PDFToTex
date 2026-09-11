@@ -8,7 +8,7 @@ import threading
 
 import pytest
 
-from .stages import BatchConfig, artifact_paths, run_batch
+from texopt.stages import BatchConfig, artifact_paths, run_batch
 
 
 def sources(tmp_path):

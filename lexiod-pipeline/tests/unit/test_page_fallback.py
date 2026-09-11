@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from .page_fallback import check_document, compile_page, structural_issues, upgrade_pages
+from texopt.page_fallback import check_document, compile_page, structural_issues, upgrade_pages
 from lexoid.core.recognition.models import PageEvidence, RenderMetadata, RenderedPage, VisionPageResult
 
 

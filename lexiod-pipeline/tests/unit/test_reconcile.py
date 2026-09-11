@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from .reconcile import (
+from texopt.reconcile import (
     _normalized, field_segments, plain_value, reconcile_document, render_crop,
     select_exceptional_fields,
 )

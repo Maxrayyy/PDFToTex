@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from . import worker_watch as watch
+from texopt import worker_watch as watch
 
 
 def setup_outage(tmp_path, monkeypatch, error="APIConnectionError"):

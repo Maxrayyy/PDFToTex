@@ -6,7 +6,7 @@ import hashlib
 import pytest
 from unittest.mock import patch
 
-from .worker_watch import install, probe_target, read_new_lines, summarize_calls, render_report
+from texopt.worker_watch import install, probe_target, read_new_lines, summarize_calls, render_report
 
 
 @pytest.mark.parametrize("message", ["error: no such object: worker-a",

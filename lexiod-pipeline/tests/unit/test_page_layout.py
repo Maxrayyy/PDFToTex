@@ -5,7 +5,7 @@ import shutil
 
 import pytest
 
-from . import cli
+from texopt import cli
 
 
 SOURCE = r"""\documentclass{article}
