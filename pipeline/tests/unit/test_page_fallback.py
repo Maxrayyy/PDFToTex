@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from texopt.page_fallback import check_document, compile_page, structural_issues, upgrade_pages
+from texopt.recognition.page_fallback import check_document, compile_page, structural_issues, upgrade_pages
 from lexoid.core.recognition.models import PageEvidence, RenderMetadata, RenderedPage, VisionPageResult
 
 
@@ -121,7 +121,7 @@ def test_failed_fallback_is_cached_and_original_tex_retained(tmp_path):
 def test_transport_failure_pauses_upgrade_and_can_resume_after_recovery(tmp_path, error):
     from lexoid.core.recognition.service import AdaptiveConcurrency
     from lexoid.core.request_errors import ModelUnavailableError
-    from .page_fallback import PageFallback
+    from texopt.recognition.page_fallback import PageFallback
     from lexoid.core.recognition.models import PageRecognitionResult
 
     source, raw, evidence = sample(tmp_path)
@@ -163,7 +163,7 @@ def test_batch_routes_to_streaming_checker_only_when_fallback_model_differs(tmp_
 
     config = BatchConfig(vision_model="gpt-5.6-sol", fallback_model="gpt-6-astra")
     stage = build_stage_commands(tmp_path / "a.pdf", tmp_path, tmp_path / "out", config)[0]
-    assert stage.argv[:3] == ["python", "-m", "texopt.page_fallback"]
+    assert stage.argv[:3] == ["python", "-m", "texopt.recognition.page_fallback"]
     assert stage.argv[stage.argv.index("--fallback-model") + 1] == "gpt-6-astra"
     direct = build_stage_commands(tmp_path / "a.pdf", tmp_path, tmp_path / "out",
                                   replace(config, vision_model="gpt-6-astra"))[0]
@@ -172,7 +172,7 @@ def test_batch_routes_to_streaming_checker_only_when_fallback_model_differs(tmp_
 
 def test_cli_streams_checked_results_into_tex_and_matching_evidence(tmp_path, monkeypatch):
     import sys
-    from . import page_fallback
+    from texopt.recognition import page_fallback
     from lexoid.core.recognition import service
 
     source, raw, evidence = sample(tmp_path)

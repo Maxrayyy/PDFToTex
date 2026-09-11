@@ -1,6 +1,6 @@
 import pytest
 
-from texopt.lexoid_job import new_job
+from texopt.recognition.lexoid_job import new_job
 from texopt.llm import LLMBatchNamer
 from texopt.reconcile import FieldReconcileAdapter
 from texopt.stages import BatchConfig, build_stage_commands

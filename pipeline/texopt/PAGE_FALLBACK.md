@@ -11,7 +11,7 @@ RENDER_DPI=240
 ```
 
 `BatchConfig` 读取上述环境。配置升级模型且与主模型不同时，识别阶段使用
-`python -m texopt.page_fallback`，否则保持原来的 `lexoid latex` 入口。
+`python -m texopt.recognition.page_fallback`，否则保持原来的 `lexoid latex` 入口。
 清空 `VISION_FALLBACK_MODEL` 可关闭检查和按页升级。
 
 Sol 视觉识别默认显式发送 `reasoning_effort=none`，可通过

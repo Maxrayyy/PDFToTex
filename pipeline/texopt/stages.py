@@ -107,7 +107,7 @@ def build_stage_commands(source, source_root, output_root, config):
     cache = Path(output_root) / ".cache" / "recognition"
     recognize = ["lexoid", "latex"]
     if config.fallback_model and config.fallback_model != config.vision_model:
-        recognize = ["python", "-m", "texopt.page_fallback",
+        recognize = ["python", "-m", "texopt.recognition.page_fallback",
                      "--fallback-model", config.fallback_model]
     return [
         StageCommand("recognize", [*recognize, "--input", str(source),

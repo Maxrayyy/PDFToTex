@@ -4,8 +4,8 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
-from texopt.page_fallback import compile_page, upgrade_pages
-from texopt.test_page_fallback import sample
+from texopt.recognition.page_fallback import compile_page, upgrade_pages
+from test_page_fallback import sample
 
 
 # LaTeX 2026/06/01 text superscript path from latex2e/base/ltfloat.dtx.

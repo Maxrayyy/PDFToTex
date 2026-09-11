@@ -21,7 +21,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from .textio import read_text_auto, write_utf8_atomic
+from ..textio import read_text_auto, write_utf8_atomic
 
 
 # ── regex patterns ─────────────────────────────────────────────────────────
