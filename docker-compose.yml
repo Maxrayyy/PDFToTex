@@ -7,7 +7,7 @@ services:
       dockerfile: lexiod-pipeline/Dockerfile.hybrid
       target: runtime
       args:
-        BASE_RUNTIME_IMAGE: ${BASE_RUNTIME_IMAGE:-lexiod-texopt:u1}
+        BASE_RUNTIME_IMAGE: ${BASE_RUNTIME_IMAGE:-pdftotex-runtime:local}
     image: pdftotex:local
     env_file:
       - Lexoid/.env
@@ -39,6 +39,8 @@ services:
       context: .
       dockerfile: lexiod-pipeline/Dockerfile.hybrid
       target: test
+      args:
+        BASE_RUNTIME_IMAGE: ${BASE_RUNTIME_IMAGE:-pdftotex-runtime:local}
     image: pdftotex-test:local
     network_mode: none
     profiles: ["test"]
