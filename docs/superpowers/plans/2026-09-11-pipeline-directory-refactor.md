@@ -35,7 +35,7 @@
 ### Task 1: 完成 texopt 包目录迁移
 
 **Files:**
-- Rename: `lexiod-pipeline/files/` -> `pipeline/`
+- Rename: `lexiod-pipeline/texopt/` -> `pipeline/`
 - Modify: `Dockerfile.hybrid`, `Dockerfile.streamlit`, `app.py`, `tests/*.py`
 - Test: `pipeline/test_*.py`, `tests/test_*.py`
 

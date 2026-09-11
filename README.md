@@ -162,7 +162,7 @@ docker volume inspect pdftotex-paddlex-cache --format '{{.Name}}'
 
 新机器需先导入该依赖镜像，或用 `BASE_RUNTIME_IMAGE` 指定兼容基础镜像。首次部署且确认外部缓存卷不存在时，可执行 `docker volume create pdftotex-paddlex-cache` 创建空卷；它不包含已有权重。
 
-Compose 依次读取 `Lexoid/.env`、`lexiod-pipeline/texopt/.env`，后者覆盖前者同名项。`lexiod-pipeline/.env` 属于另一个入口，不由当前 Compose 的 `env_file` 自动加载。新部署参考 [files/.env.example](lexiod-pipeline/texopt/.env.example)，已有配置不要用模板覆盖。
+Compose 依次读取 `Lexoid/.env`、`lexiod-pipeline/texopt/.env`，后者覆盖前者同名项。`lexiod-pipeline/.env` 属于另一个入口，不由当前 Compose 的 `env_file` 自动加载。新部署参考 [texopt/.env.example](lexiod-pipeline/texopt/.env.example)，已有配置不要用模板覆盖。
 
 视觉与修复接口使用 `OPENAI_API_KEY`、`OPENAI_BASE_URL`，凭据仅放本地忽略的 `.env`，不写入文档、队列或镜像。当前方案的模型参数为：
 
@@ -188,7 +188,7 @@ TEXOPT_SEMANTIC_NAMING=deferred
 | `PIPELINE_PUBLISH_ROOT` | 正式 TEX 根目录，队列模式设置到当前批次 |
 | `TEXOPT_NAME_CACHE` | 默认 `/data/.cache/semantic-names.sqlite3` |
 
-优先级为 `docker compose run -e` 高于 Compose `environment`，再高于 `env_file`。例如仅在 `files/.env` 设置视觉并发为 2，不能覆盖 Compose 的默认 4，下面的命令显式使用 `-e`。代码或环境改变后需重建镜像/重建容器，`docker start` 仍使用旧容器配置。修改 Lexoid 依赖后，使用 `./scripts/update-lock.sh` 自动创建或复用 Poetry 环境并重生成锁文件。
+优先级为 `docker compose run -e` 高于 Compose `environment`，再高于 `env_file`。例如仅在 `texopt/.env` 设置视觉并发为 2，不能覆盖 Compose 的默认 4，下面的命令显式使用 `-e`。代码或环境改变后需重建镜像/重建容器，`docker start` 仍使用旧容器配置。修改 Lexoid 依赖后，使用 `./scripts/update-lock.sh` 自动创建或复用 Poetry 环境并重生成锁文件。
 
 ## 5. Docker 构建与启动
 
