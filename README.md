@@ -37,7 +37,6 @@ git submodule status
 | 调整 Docker 服务、环境和挂载 | [docker-compose.yml](docker-compose.yml) |
 | 查看按页升级细节 | [PAGE_FALLBACK.md](lexiod-pipeline/files/PAGE_FALLBACK.md) |
 | 查看字段命名、优化器命令和历史 cron 模式 | [优化器 README](lexiod-pipeline/files/README.md) |
-| 查看早期重构、试验与数据迁移记录 | [REFACTOR_WORKSPACE.md](REFACTOR_WORKSPACE.md) |
 
 除特别注明外，以下命令都从本目录执行：
 
