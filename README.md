@@ -68,7 +68,7 @@ flowchart TD
 3. **字段协调**：`gpt-6-astra` 读取 480 DPI 源图裁片，默认只自动复核日期、批号、数量等格式异常。手写/印刷值和勾选不确定等保留首次值与人工核对标记；原始识别 TEX 不被覆盖。
 4. **优化**：实际测量弹性列宽，将 `tabularx` 等结构转换成可定位的表格，生成稳定字段 ID，处理分页及 TEX 结构。必要的语法/编译修复使用 `TEXOPT_REPAIR_MODEL=gpt-5.6-sol`。
 5. **编译发布**：两遍 XeLaTeX 成功后发布 TEX，工作区保留编译 PDF、字段注册表、布局检查和报告。编译成功不等于内容已人工确认，手写辨识、遗漏和视觉错位仍需核对。
-6. **延后语义命名**：默认 `TEXOPT_SEMANTIC_NAMING=deferred`，先交付 TEX/PDF 与基础字段信息，再按需用 `kimi-k3` 补充 JSON 名称。命名不修改字段值或 TEX，也不重新编译。
+6. **延后语义命名**：默认 `TEXOPT_SEMANTIC_NAMING=deferred`，先交付 TEX/PDF 与基础字段信息，再按需用 `deepseek-v4-flash` 补充 JSON 名称。命名不修改字段值或 TEX，也不重新编译。
 
 当前队列同一时刻只处理一份 PDF。主模型与升级模型共享单容器视觉并发额度 2，协调并发为 2；多个容器的额度分别计算。一个 PDF 失败时队列暂停，后续 PDF 保持待处理。
 
@@ -149,12 +149,12 @@ data/optimized/U1/批次数据/A37Z201202602014/BP-C3152R_20260805_132837.tex
 
 ## 4. 环境与配置
 
-需要已启动的 Docker Desktop、Docker Compose v2、可用的模型 API，以及本机 Python 3（监控使用标准库）。当前 Dockerfile 基于本机已有的 `lexiod-texopt:u1` 依赖镜像，其中包含页面方向检测运行时和 XeLaTeX，不能在缺少基础镜像时直接从零构建。
+需要已启动的 Docker Desktop、Docker Compose v2、可用的模型 API，以及本机 Python 3（监控使用标准库）。当前 Dockerfile 基于本机已有的 `pdftotex-runtime:local` 依赖镜像，其中包含页面方向检测运行时和 XeLaTeX，不能在缺少基础镜像时直接从零构建。
 
 ```bash
 docker version
 docker compose version
-docker image inspect lexiod-texopt:u1 --format '{{.Id}}'
+docker image inspect pdftotex-runtime:local --format '{{.Id}}'
 docker volume inspect pdftotex-paddlex-cache --format '{{.Name}}'
 ```
 
@@ -170,7 +170,7 @@ SOL_VISION_REASONING_EFFORT=none
 VISION_FALLBACK_MODEL=gpt-6-astra
 RECONCILE_MODEL=gpt-6-astra
 TEXOPT_REPAIR_MODEL=gpt-5.6-sol
-TEXOPT_MODEL=kimi-k3
+TEXOPT_MODEL=deepseek-v4-flash
 TEXOPT_SEMANTIC_NAMING=deferred
 ```
 
@@ -393,7 +393,7 @@ docker compose run --rm --no-deps worker texopt name-fields \
   /data/workers/example/.pipeline/example/example.optimized.tex \
   --registry /data/workers/example/.pipeline/example/example.fields.json \
   --output /data/workers/example/.pipeline/example/example.enriched.json \
-  --model kimi-k3 --name-cache /data/.cache/semantic-names.sqlite3
+  --model deepseek-v4-flash --name-cache /data/.cache/semantic-names.sqlite3
 ```
 
 命名验证 TEX、计划与 JSON 哈希，按稳定 ID 补充名称。缓存使用本地 SQLite，不放到不支持 SQLite 锁的网络共享目录。`name_status=complete` 只表示名称已生成，不表示业务数据已经核验。
