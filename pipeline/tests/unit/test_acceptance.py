@@ -1,4 +1,4 @@
-from texopt.acceptance import evaluate, evaluate_metrics
+from texopt.optimization.acceptance import evaluate, evaluate_metrics
 
 
 def test_acceptance_rejects_missing_duplicate_and_unordered_pages():

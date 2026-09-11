@@ -1,9 +1,9 @@
 """
 Interface 2/3 backend: optimise a lexoid .tex and report what changed.
 
-    python -m texopt.cli optimise IN.tex -o OUT.tex --start-page 76 \
+    python -m texopt.optimization.cli optimise IN.tex -o OUT.tex --start-page 76 \
         --registry fields.json --report report.json
-    python -m texopt.cli verify OUT.tex OUT.pdf --registry fields.json
+    python -m texopt.optimization.cli verify OUT.tex OUT.pdf --registry fields.json
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from pathlib import Path
 from . import opaque, preamble
 from .fields import DetectorConfig, annotate_fields, write_registry, basic_fields
 from .llm import DeferredBatchNamer, LLMBatchNamer
-from .model_config import resolve_model
+from ..model_config import resolve_model
 from .local_tex import normalize_tex
 from .outline import normalize_outline
 from .syntax_check import validate_latex
@@ -33,7 +33,7 @@ from .syntax_repair import (LLMSyntaxRepairer, canonicalize_document_terminator,
                             page_numbers_for_lines,
                             repair_invariant_violations)
 from .tex_tables import TableStat, transform_tex
-from .textio import read_text_auto, write_utf8_atomic
+from ..textio import read_text_auto, write_utf8_atomic
 
 
 class _Tee:

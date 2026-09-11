@@ -8,11 +8,11 @@ setup(
     version="0.1.0",
     description="Durable Lexoid LaTeX optimization and reviewed JSON pipeline",
     python_requires=">=3.10",
-    packages=["texopt", "texopt.monitoring"],
+    packages=["texopt", "texopt.monitoring", "texopt.recognition", "texopt.optimization"],
     package_dir={"texopt": "."},
     entry_points={
         "console_scripts": [
-            "texopt=texopt.cli:main",
+            "texopt=texopt.optimization.cli:main",
             "texopt-pipeline=texopt.pipeline_daemon:main",
         ]
     },

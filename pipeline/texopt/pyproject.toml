@@ -10,9 +10,9 @@ requires-python = ">=3.10"
 dependencies = ["pypdfium2>=4.30,<5", "Pillow>=10,<13", "pylatexenc>=2.10,<3"]
 
 [project.scripts]
-texopt = "texopt.cli:main"
+texopt = "texopt.optimization.cli:main"
 texopt-pipeline = "texopt.pipeline_daemon:main"
 
 [tool.setuptools]
-packages = ["texopt", "texopt.monitoring"]
+packages = ["texopt", "texopt.monitoring", "texopt.recognition", "texopt.optimization"]
 package-dir = {texopt = "."}

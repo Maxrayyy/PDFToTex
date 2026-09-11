@@ -9,14 +9,14 @@ import re
 import time
 import urllib.error
 import urllib.request
-from .model_telemetry import request_json
+from ..model_telemetry import request_json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 
 from .llm import ANTHROPIC_API_URL, _is_openai_model, openai_api_url
-from .model_config import resolve_model
-from .textio import write_utf8_atomic
+from ..model_config import resolve_model
+from ..textio import write_utf8_atomic
 from .syntax_check import _mask_verbatim
 from .tex_tables import CS_RE, _read_balanced, _skip_ws, iter_structural, mask_comments
 

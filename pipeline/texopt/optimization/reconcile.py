@@ -22,8 +22,8 @@ from lexoid.core.request_errors import is_request_failure
 
 from .fields import _extract_fieldvalue
 from .llm import openai_api_url
-from .model_telemetry import emit, request_json
-from .textio import read_text_auto, write_utf8_atomic
+from ..model_telemetry import emit, request_json
+from ..textio import read_text_auto, write_utf8_atomic
 
 RECONCILE_VERSION = "reconcile-v2-date-parts"
 AUTO_REVIEW_REASONS = frozenset({"critical_format_invalid"})
@@ -235,7 +235,7 @@ def render_crop(source_pdf, candidate, retry_dpi):
 
 class FieldReconcileAdapter:
     def __init__(self, model=None, timeout=180):
-        from .model_config import resolve_model
+        from ..model_config import resolve_model
         self.model = resolve_model("RECONCILE_MODEL", model)
         self.timeout = timeout
 

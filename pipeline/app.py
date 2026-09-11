@@ -3,7 +3,7 @@ Lexiod Pipeline — Streamlit Web UI
 ====================================
 Three tabs:
   1. PDF → LaTeX    (single or batch, via docker compose run lexoid)
-  2. TeX Optimizer   (single or batch, via python -m texopt.cli optimise)
+  2. TeX Optimizer   (single or batch, via python -m texopt.optimization.cli optimise)
 
 Batch mode: upload multiple files → they are queued and processed one-by-one.
 Each file gets its own output sub-directory.  The queue auto-advances:
@@ -350,10 +350,10 @@ def _single_run_tex(argv: list[str], log_path: Path) -> None:
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with open(log_path, "wb") as log:
-            log.write(f"$ {sys.executable} -m texopt.cli {' '.join(argv)}\n".encode())
+            log.write(f"$ {sys.executable} -m texopt.optimization.cli {' '.join(argv)}\n".encode())
             log.flush()
             proc = subprocess.Popen(
-                [sys.executable, "-m", "texopt.cli"] + argv,
+                [sys.executable, "-m", "texopt.optimization.cli"] + argv,
                 stdout=log, stderr=subprocess.STDOUT, cwd=str(PROJECT_ROOT),
             )
             rc = proc.wait()
@@ -409,10 +409,10 @@ def _run_tex_in_thread(
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with open(log_path, "wb") as log:
-            log.write(f"$ {sys.executable} -m texopt.cli {' '.join(argv)}\n".encode())
+            log.write(f"$ {sys.executable} -m texopt.optimization.cli {' '.join(argv)}\n".encode())
             log.flush()
             proc = subprocess.Popen(
-                [sys.executable, "-m", "texopt.cli"] + argv,
+                [sys.executable, "-m", "texopt.optimization.cli"] + argv,
                 stdout=log,
                 stderr=subprocess.STDOUT,
                 cwd=str(PROJECT_ROOT),
@@ -954,7 +954,7 @@ with tab_tex:
         # Command preview
         if st.session_state.tex_status == "idle" and st.session_state.tex_uploaded_name:
             input_name = st.session_state.tex_uploaded_name
-            preview_argv = [sys.executable, "-m", "texopt.cli"] + _make_tex_argv(input_name)
+            preview_argv = [sys.executable, "-m", "texopt.optimization.cli"] + _make_tex_argv(input_name)
             with st.expander("📋 Command preview"):
                 st.code(" ".join(preview_argv), language="bash")
 

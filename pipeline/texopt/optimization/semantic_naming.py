@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .fields import basic_fields
 from .llm import FieldSpec, TableNameRequest, LLMBatchNamer
-from .textio import write_utf8_atomic
+from ..textio import write_utf8_atomic
 
 
 def tex_hash(tex):

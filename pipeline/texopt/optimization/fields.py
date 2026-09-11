@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Protocol
 
 from .tex_tables import ALIGN_ENVS, SYNC_ANCHOR, _read_balanced, mask_comments, multicolumn_span
-from .textio import write_utf8_atomic
+from ..textio import write_utf8_atomic
 
 # --------------------------------------------------------------------------- #
 # page tracking

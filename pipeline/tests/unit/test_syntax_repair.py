@@ -10,7 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from texopt.syntax_repair import (LLMSyntaxRepairer, SYSTEM_PROMPT, apply_line_edits,
+from texopt.optimization.syntax_repair import (LLMSyntaxRepairer, SYSTEM_PROMPT, apply_line_edits,
                             canonicalize_document_terminator, group_lexoid_pages,
                             normalize_control_word_boundaries,
                             normalize_multicolumn_linebreaks,

@@ -7,7 +7,7 @@ import multiprocessing
 
 import pytest
 
-from texopt.llm import FieldSpec, TableNameRequest, LLMBatchNamer
+from texopt.optimization.llm import FieldSpec, TableNameRequest, LLMBatchNamer
 
 
 def request(value="20", *, unit="C", label="Temperature"):

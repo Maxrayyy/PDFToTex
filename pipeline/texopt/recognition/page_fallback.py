@@ -14,10 +14,10 @@ import tempfile
 import time
 
 from ..model_telemetry import emit
-from ..local_tex import VERSION as LOCAL_TEX_VERSION, normalize_tex
-from ..syntax_check import SyntaxIssue, _alignment_colspec, validate_latex
-from ..syntax_repair import canonicalize_document_terminator, split_lexoid_pages
-from ..tex_tables import (_peel_prefix, iter_structural, mask_comments,
+from ..optimization.local_tex import VERSION as LOCAL_TEX_VERSION, normalize_tex
+from ..optimization.syntax_check import SyntaxIssue, _alignment_colspec, validate_latex
+from ..optimization.syntax_repair import canonicalize_document_terminator, split_lexoid_pages
+from ..optimization.tex_tables import (_peel_prefix, iter_structural, mask_comments,
                          multicolumn_span, parse_colspec, split_align_body)
 from ..textio import write_utf8_atomic
 

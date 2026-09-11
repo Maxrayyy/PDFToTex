@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from texopt.fields import FieldRecord, write_registry
+from texopt.optimization.fields import FieldRecord, write_registry
 
 
 @pytest.mark.parametrize("failure", ["value", "ids", "malformed", "unexpected"])

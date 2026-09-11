@@ -9,7 +9,7 @@ import json
 import math
 from pathlib import Path
 
-from .textio import write_utf8_atomic
+from ..textio import write_utf8_atomic
 
 CORPUS = (
     "S22C-726080515020.pdf", "S22C-726080515560.pdf", "S22C-726080516000.pdf",
