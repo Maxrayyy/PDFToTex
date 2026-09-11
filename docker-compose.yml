@@ -1,4 +1,4 @@
-name: lexiod-refactor
+name: pdftotex
 
 services:
   worker:
@@ -8,7 +8,7 @@ services:
       target: runtime
       args:
         BASE_RUNTIME_IMAGE: ${BASE_RUNTIME_IMAGE:-lexiod-texopt:u1}
-    image: lexiod-refactor:local
+    image: pdftotex:local
     env_file:
       - Lexoid/.env
       - lexiod-pipeline/files/.env
@@ -31,7 +31,6 @@ services:
       - ./scripts:/opt/pdftotex:ro
       - paddle-cache:/root/.paddle
       - paddlex-cache:/root/.paddlex
-      - huggingface-cache:/root/.cache/huggingface
     command: ["texopt-pipeline", "--once"]
     restart: "no"
 
@@ -40,7 +39,7 @@ services:
       context: .
       dockerfile: lexiod-pipeline/Dockerfile.hybrid
       target: test
-    image: lexiod-refactor-test:local
+    image: pdftotex-test:local
     network_mode: none
     profiles: ["test"]
 
@@ -49,4 +48,3 @@ volumes:
   paddlex-cache:
     external: true
     name: lexiod-u2-paddlex-cache
-  huggingface-cache:

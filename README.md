@@ -4,7 +4,7 @@
 
 本文按 2026-09-09 的代码与本机部署整理。当前采用纯视觉识别、按页升级、字段协调和 TEX 优化编译，通过 Docker 容器顺序处理指定批次。宿主机为 macOS / Apple Silicon，容器为 Linux ARM64 CPU 环境，视觉模型通过远程 API 调用。
 
-总项目通过 Git submodule 管理两个独立仓库：`Lexoid` 为识别器，`lexiod-pipeline` 为优化器与流水线。Compose 项目名和镜像名为 `lexiod-refactor`。
+总项目通过 Git submodule 管理两个独立仓库：`Lexoid` 为识别器，`lexiod-pipeline` 为优化器与流水线。Compose 项目名和镜像名为 `pdftotex`。
 
 ## 获取项目
 
@@ -107,9 +107,8 @@ lexiod/
 | `../Downloads` | `/input`，只读 | 原始 PDF |
 | `../data` | `/data`，可写 | 结果、工作区、队列、监控、缓存 |
 | `./scripts` | `/opt/pdftotex`，只读 | 主仓库管理的队列与续跑脚本 |
-| `lexiod-refactor_paddle-cache` 命名卷 | `/root/.paddle` | Paddle 缓存 |
+| `pdftotex_paddle-cache` 命名卷 | `/root/.paddle` | Paddle 缓存 |
 | `lexiod-u2-paddlex-cache` 外部命名卷 | `/root/.paddlex` | 页面方向检测模型缓存 |
-| `lexiod-refactor_huggingface-cache` 命名卷 | `/root/.cache/huggingface` | Hugging Face 模型缓存 |
 
 删除容器不删除上述宿主机文件，重建镜像也不清空命名卷。运行脚本随总项目一起克隆，通过只读挂载提供给容器，工作结果写入 `/data`。
 
@@ -199,7 +198,7 @@ docker compose run --rm --no-deps tests
 docker compose run --rm --no-deps worker texopt-pipeline --help
 ```
 
-镜像为 `lexiod-refactor:local`、`lexiod-refactor-test:local`。构建需要网络下载依赖；测试服务禁用网络，排除已有的两个网络集成测试模块。构建不会更新已经运行的容器。
+镜像为 `pdftotex:local`、`pdftotex-test:local`。构建需要网络下载依赖；测试服务禁用网络，排除已有的两个网络集成测试模块。构建不会更新已经运行的容器。
 
 ### 5.2 当前推荐：指定批次队列
 
