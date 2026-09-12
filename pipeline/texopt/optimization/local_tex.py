@@ -381,6 +381,41 @@ def normalize_numeric_text_backslashes(source):
     return normalized, int(normalized != source)
 
 
+def normalize_handwritten_text_backslashes(source):
+    """Render doubled backslashes inside literal handwritten fields as text.
+
+    Handwritten values are text evidence. A value such as ``3\\\\#A`` must
+    not become a table row break when it appears inside ``\\handwritten{...}``.
+    Keep inline ``$...$`` fragments intact; those are the explicit exception
+    used for scientific notation and units.
+    """
+    from .reconcile import escape_handwritten_tex
+
+    edits = []
+    cursor = 0
+    marker = r"\handwritten"
+    while True:
+        start = source.find(marker, cursor)
+        if start < 0:
+            break
+        open_at = _skip_ws(source, start + len(marker))
+        parsed = _read_balanced(source, open_at, "{", "}")
+        if parsed is None:
+            cursor = start + len(marker)
+            continue
+        value, end = parsed
+        if r"\\" in value:
+            # Model output uses ``\\\\`` for one literal backslash. Fold the
+            # pair before escaping TeX specials so it renders once.
+            literal = value.replace(r"\\", "\\")
+            replacement = r"\handwritten{" + escape_handwritten_tex(literal) + "}"
+            edits.append((start, end, replacement))
+        cursor = end
+    for start, end, replacement in reversed(edits):
+        source = source[:start] + replacement + source[end:]
+    return source, len(edits)
+
+
 def normalize_unclosed_makebox_rows(source):
     """Close truncated underline/makebox wrappers on a single table row.
 
@@ -545,6 +580,7 @@ def normalize_tex(source):
     for name, operation in (
         ("literal_model_newlines", normalize_literal_model_newlines),
         ("numeric_text_backslashes", normalize_numeric_text_backslashes),
+        ("handwritten_text_backslashes", normalize_handwritten_text_backslashes),
         ("unclosed_makebox_rows", normalize_unclosed_makebox_rows),
         ("unclosed_field_rows", normalize_unclosed_field_rows),
         ("unclosed_tabular_specs", normalize_unclosed_tabular_specs),

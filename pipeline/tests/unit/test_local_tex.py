@@ -62,6 +62,20 @@ def test_numeric_backslashes_become_visible_text_not_row_breaks():
     assert changes["numeric_text_backslashes"] == 1
 
 
+def test_handwritten_backslashes_are_literal_text_inside_tables(tmp_path):
+    from texopt.optimization.local_tex import normalize_tex
+
+    source = (r"\documentclass{article}\begin{document}" + "\n"
+        + r"\begin{tabular}{|p{4cm}|p{4cm}|}\hline" + "\n"
+        + r"Operation & \fieldvalue{\handwritten{3\\#培养间 5260C}}\\\hline" + "\n"
+        + r"\end{tabular}\end{document}")
+    fixed, changes = normalize_tex(source)
+    assert changes["handwritten_text_backslashes"] == 1
+    assert r"\handwritten{3\textbackslash{}\#培养间 5260C}" in fixed
+    assert not compile_page(fixed, tmp_path / "handwritten")
+    assert normalize_tex(fixed)[0] == fixed
+
+
 def test_ulem_script_repair_preserves_fields_and_ignores_literals_and_boxes():
     from texopt.optimization.local_tex import normalize_tex
 
