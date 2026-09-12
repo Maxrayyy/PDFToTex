@@ -56,7 +56,9 @@ RUN ln -sf /src/texopt/optimization/cli.py /tests/pipeline/tests/unit/cli.py \
     && ln -sf /src/texopt/recognition/page_fallback.py /tests/pipeline/tests/unit/page_fallback.py \
     && ln -sf /src/texopt/runtime/pipeline_state.py /tests/pipeline/tests/unit/pipeline_state.py \
     && ln -sfn /src/texopt/core /tests/pipeline/tests/core \
+    && ln -sfn /src/texopt/optimization /tests/pipeline/tests/optimization \
     && ln -sfn /src/texopt/recognition /tests/pipeline/tests/recognition \
-    && ln -sfn /src/texopt/runtime /tests/pipeline/tests/runtime
+    && ln -sfn /src/texopt/runtime /tests/pipeline/tests/runtime \
+    && ln -sf /src/texopt/runtime/pdf_batch.py /tests/pipeline/tests/unit/pdf_batch.py
 WORKDIR /tests/run
 CMD ["sh", "-c", "python -m pytest -q --import-mode=importlib /tests/pipeline/tests/unit /tests/pipeline/tests && python -m pytest -q --import-mode=importlib /tests/lexoid --ignore=/tests/lexoid/test_cli.py --ignore=/tests/lexoid/test_parser.py --ignore=/tests/lexoid/test_web_parsing.py"]
