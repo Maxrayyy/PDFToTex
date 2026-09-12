@@ -849,6 +849,13 @@ def cmd_optimise(a: argparse.Namespace) -> int:
     if layout_evidence is not None:
         out, layout_report = prepare_layout(out, layout_evidence)
 
+    # Layout preparation can reflow page fragments. Apply the final conservative
+    # text normalization immediately before writing so generated TeX is canonical.
+    out, final_boundary_normalization = normalize_tex(out)
+    if final_boundary_normalization:
+        _event("FINAL_TEX_NORMALIZED", "normalized TeX immediately before write",
+               changes=final_boundary_normalization)
+
     print("[6/7] Writing output…", file=sys.stderr, flush=True)
     write_utf8_atomic(a.output, out)
     _event("OUTPUT_WRITE", "optimized LaTeX written",
