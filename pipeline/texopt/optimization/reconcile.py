@@ -98,6 +98,7 @@ def field_segments(tex):
 
 
 def _normalized(value):
+    value = value.replace("ˆ", "^").replace("＾", "^")
     value = re.sub("[\u2070\u00b9\u00b2\u00b3\u2074-\u2079\u207a\u207b]+",
                    lambda m: "^" + unicodedata.normalize("NFKC", m.group()), value)
     value = re.sub("[\u2080-\u2089\u208a\u208b]+",

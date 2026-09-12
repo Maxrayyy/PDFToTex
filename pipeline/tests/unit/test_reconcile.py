@@ -30,6 +30,11 @@ def evidence():
     }]}
 
 
+def test_plain_value_normalizes_common_math_tex_to_evidence_text():
+    rendered = r"$1\ensuremath{\times}10\textasciicircum{}6$"
+    assert _normalized(plain_value(rendered)) == _normalized("1×10^6")
+
+
 def date_fixture(year="2023", month="07", day="28"):
     ev = evidence()
     ev["pages"][0]["ocr_blocks"] = []
