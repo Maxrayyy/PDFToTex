@@ -379,6 +379,38 @@ def normalize_numeric_text_backslashes(source):
     return normalized, int(normalized != source)
 
 
+def normalize_uniform_table_overflow(source):
+    """Expand a table spec only when every populated row has one extra cell."""
+    edits = []
+    masked = mask_comments(source)
+    for begin in iter_structural(masked):
+        if begin.kind != "align_begin" or begin.name != "tabular":
+            continue
+        end = next((token for token in iter_structural(masked[begin.end:])
+                    if token.kind == "align_end"), None)
+        if end is None:
+            continue
+        end_start = begin.end + end.start
+        head = source[begin.start:begin.body_start]
+        spec = alignment_colspec(head, "tabular")
+        expected = len(parse_colspec(spec))
+        if not expected:
+            continue
+        rows = [row for row in split_align_body(source[begin.body_start:end_start])
+                if any(cell.text.strip() for cell in row.cells)]
+        spans = [sum(multicolumn_span(cell.text) for cell in row.cells) for row in rows]
+        if len(spans) < 2 or any(span != expected + 1 for span in spans):
+            continue
+        spec_pos = head.rfind("{" + spec + "}")
+        if spec_pos < 0:
+            continue
+        start = begin.start + spec_pos + 1
+        edits.append((start + len(spec), "l"))
+    for position, suffix in reversed(edits):
+        source = source[:position] + suffix + source[position:]
+    return source, len(edits)
+
+
 def normalize_tex(source):
     changes = {}
     for name, operation in (
@@ -394,6 +426,7 @@ def normalize_tex(source):
         ("split_paragraph_rows", normalize_split_paragraph_rows),
         ("table_row_endings", normalize_table_row_endings),
         ("table_heading_breaks", normalize_table_heading_breaks),
+        ("uniform_table_overflow", normalize_uniform_table_overflow),
         ("missing_support", inject_support),
     ):
         source, count = operation(source)
