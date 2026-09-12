@@ -122,6 +122,11 @@ class SyntaxRepairTests(unittest.TestCase):
         self.assertIn(r"% #HANDWRITTEN: \diagup", repaired)
         self.assertEqual(normalize_text_mode_math_symbols(repaired), (repaired, 0))
 
+    def test_text_mode_times_is_safe(self) -> None:
+        repaired, count = normalize_text_mode_math_symbols(r"300\times g 条件")
+        self.assertEqual(count, 1)
+        self.assertEqual(repaired, r"300\ensuremath{\times} g 条件")
+
     def test_zero_argument_spacing_commands_are_delimited_before_cjk(self) -> None:
         source = (
             "正文\\quad至\\qquad结束\n"
