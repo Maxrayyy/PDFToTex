@@ -306,6 +306,11 @@ def normalize_stray_cjk_backslashes(source: str) -> tuple[str, int]:
     return normalized, changed
 
 
+def normalize_standalone_newlines(source: str) -> tuple[str, int]:
+    """Use paragraph breaks for standalone newlines in vertical text mode."""
+    return re.subn(r"(?m)^[ \t]*\\newline[ \t]*$", r"\\par", source)
+
+
 class LLMSyntaxRepairer:
     """Repair consecutive Lexoid-page batches and cache accepted responses."""
 
