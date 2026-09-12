@@ -35,6 +35,13 @@ PDFToTex/
 
 `Lexoid/` 保留独立 Git 仓库；`pipeline/` 已解除嵌套 Git并由总项目统一提交。这样可以独立维护 Lexoid，同时让流水线目录重构、Docker 配置和监控代码随总项目统一回退。
 
-## 当前过渡状态
+## 当前状态
 
-流水线包已从 `files` 改名为 `texopt`，Docker 入口位于 `pipeline/docker/`，测试位于 `pipeline/tests/`。生产模块保留在同一 `texopt` 包中，以维持现有相对导入和命令入口稳定。
+目录重构已经完成：流水线包位于 `pipeline/texopt/`，Docker 入口位于
+`pipeline/docker/`，测试位于 `pipeline/tests/`，根目录 `docker-compose.yml`
+是生产队列的唯一 Compose 入口。生产模块保留在同一 `texopt` 包中，以维持
+`texopt` 和 `texopt-pipeline` 命令入口稳定。
+
+`pipeline/docker/docker-compose.yml` 与 `pipeline/app.py` 是可选的网页上传入口，
+不参与根目录队列 worker 的默认启动。网页入口仍复用同一 `texopt` 包和 JSON
+导出能力，不能与生产队列目录混用配置。

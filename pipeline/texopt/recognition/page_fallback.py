@@ -265,7 +265,11 @@ class PageFallback:
         self.report["unresolved"].append(number)
         emit({"event": "page_upgrade_finish", "stage": "recognize", "page": number,
               "model": self.model, "action": "keep_original_tex", "status": record["status"]})
-        return result
+        # Local normalization is only a candidate while the page is being
+        # checked. If the image-grounded upgrade cannot produce a valid page,
+        # retain the exact primary output so a failed fallback never mutates
+        # the recognized document.
+        return replace(result, latex=original)
 
 
 def upgrade_pages(source, raw, evidence_path, cache_dir, primary_model, fallback_model, **kwargs):
@@ -281,7 +285,14 @@ def upgrade_pages(source, raw, evidence_path, cache_dir, primary_model, fallback
         output.append(result.latex)
         evidence.append(result.evidence.to_dict())
     # Later pages may introduce packages that belong in the first-page preamble.
-    finalized, _ = normalize_tex(canonicalize_document_terminator("".join(output))[0])
+    joined = "".join(output)
+    if processor.report["unresolved"]:
+        # A failed image fallback must not trigger a second, document-wide
+        # rewrite. Keep the primary page text byte-for-byte and only combine
+        # successful fallback pages from the replay.
+        finalized = joined
+    else:
+        finalized, _ = normalize_tex(canonicalize_document_terminator(joined)[0])
     write_utf8_atomic(raw, finalized)
     payload.update(pages=evidence, page_models=processor.report["page_models"])
     write_utf8_atomic(evidence_path, json.dumps(payload, ensure_ascii=False, indent=2))

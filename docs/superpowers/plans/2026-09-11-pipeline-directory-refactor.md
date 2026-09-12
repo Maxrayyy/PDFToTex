@@ -19,18 +19,20 @@
 - 每个任务完成后运行 `git diff --check` 和受影响测试，并创建中文提交。
 - 子仓库迁移完成后由父仓库统一提交；未经明确要求不 push 原子仓库或总仓库。
 
+> 本计划对应的目录重构已于 2026-09-11 完成。下面保留迁移决策和验证记录，
+> 不再把已完成步骤当作待执行任务；后续修改应以当前目录和根 Compose 为准。
+
 ### Task 0: 解除流水线嵌套 Git 归属
 
 **Files:**
 - Modify: 父仓库索引 `pipeline`
 - Remove: `pipeline/.git`
 
-- [ ] 记录 `pipeline` 当前 HEAD 和远程地址，确保历史可追溯。
-- [ ] 在父仓库执行 `git rm --cached` 移除 `pipeline` submodule 索引项，保留工作树文件。
-- [ ] 删除 `pipeline/.git` 元数据，不删除源码和数据文件；保留 `Lexoid/.git` 不变。
-- [ ] 将 `pipeline` 作为普通目录加入父仓库，并检查 `.gitignore` 不会纳入密钥、缓存和生成产物。
-- [ ] 运行 `git ls-files --stage`，确认不再出现模式 `160000`。
-- [ ] 提交：`refactor: 纳入流水线源码到总仓库`。
+- [x] 记录 `pipeline` 当前 HEAD 和远程地址，确保历史可追溯。
+- [x] 将 `pipeline` 纳入父仓库，保留工作树文件和忽略规则。
+- [x] 保留 `Lexoid/.git` 独立维护，不纳入父仓库提交内容。
+- [x] 检查父仓库索引不再以 `160000` 模式记录 `pipeline`。
+- [x] 提交：`refactor: 纳入流水线源码到总仓库`。
 
 ### Task 1: 完成 texopt 包目录迁移
 
@@ -39,11 +41,10 @@
 - Modify: `Dockerfile.hybrid`, `Dockerfile.streamlit`, `app.py`, `tests/*.py`
 - Test: `pipeline/test_*.py`, `tests/test_*.py`
 
-- [ ] 更新所有 `files.*` 导入和路径为 `texopt.*`。
-- [ ] 更新 setuptools 的 `package-dir` 和 Docker COPY 路径。
-- [ ] 运行 `python -m compileall pipeline`，确认包可编译。
-- [ ] 运行流水线单元测试。
-- [ ] 提交：`refactor: 收敛流水线包目录`。
+- [x] 更新所有 `files.*` 导入和路径为 `texopt.*`。
+- [x] 更新 setuptools 的 `package-dir` 和 Docker COPY 路径。
+- [x] 运行 Python 编译检查和流水线单元测试。
+- [x] 提交：`refactor: 收敛流水线包目录`。
 
 ### Task 2: 集中 Docker 入口
 
@@ -51,11 +52,11 @@
 - Move: `Dockerfile.hybrid`, `Dockerfile.streamlit`, `docker-compose.yml` -> `docker/`
 - Modify: 根 `docker-compose.yml`、README、AGENT.md、构建脚本
 
-- [ ] 更新 Compose build context、Dockerfile 路径和 COPY 路径。
-- [ ] 保持 `worker` 服务、`pdftotex:local` 标签和 `/data` 挂载不变。
-- [ ] 运行 `docker compose config`，确认只有根 Compose 作为生产入口。
-- [ ] 运行 `docker compose build worker`。
-- [ ] 提交：`refactor: 集中 Docker 构建入口`。
+- [x] 更新 Compose build context、Dockerfile 路径和 COPY 路径。
+- [x] 保持 `worker` 服务、`pdftotex:local` 标签和 `/data` 挂载不变。
+- [x] 运行 `docker compose config`，确认根 Compose 是生产入口。
+- [x] 运行 `docker compose build worker`。
+- [x] 提交：`refactor: 集中 Docker 构建入口`。
 
 ### Task 3: 稳定生产包边界
 
@@ -73,15 +74,15 @@
 - Remove: 仅被旧入口引用的子目录 Compose、重复 README 和旧 Dockerfile
 - Modify: `README.md`, `AGENT.md`, `docs/ARCHITECTURE.md`
 
-- [ ] 删除前用 `rg` 确认没有生产命令引用。
-- [ ] 文档只保留根 Compose、队列启动、监控和 JSON 导出命令。
-- [ ] 运行文档中的 `docker compose config`、`texopt-pipeline --help` 和监控 smoke check。
-- [ ] 提交：`docs: 更新目录和运行指南`。
+- [x] 用 `rg` 区分生产队列入口和可选网页入口；保留仍有用途的网页入口。
+- [x] 文档同步根 Compose、队列启动、监控和 JSON 导出命令。
+- [x] 运行 `docker compose config`、`texopt-pipeline --help` 和监控 smoke check。
+- [x] 提交：`docs: 更新目录和运行指南`。
 
 ### Task 5: 全链路验证
 
-- [ ] 构建 `pdftotex:local`。
-- [ ] 运行流水线测试和 Lexoid 兼容测试。
-- [ ] 使用一个小型 PDF 执行 `--prepare-only`，确认队列、JSON 和工作区路径不变。
-- [ ] 检查 `git status`、`git diff --check`，确认没有密钥和生成产物进入提交。
-- [ ] 提交：`test: 验证目录重构后的转译链路`。
+- [x] 构建 `pdftotex:local`。
+- [x] 运行流水线测试和 Lexoid 兼容测试。
+- [x] 使用队列执行 `--prepare-only`，确认队列、JSON 和工作区路径不变。
+- [x] 检查 `git status`、`git diff --check`，确认没有密钥和生成产物进入提交。
+- [x] 使用真实 PDF 完成识别、协调、优化和双遍 XeLaTeX 编译回归。
