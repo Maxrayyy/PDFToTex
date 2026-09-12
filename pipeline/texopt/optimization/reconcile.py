@@ -107,6 +107,20 @@ def _normalized(value):
     return re.sub(r"\s+", "", value).casefold()
 
 
+def _values_match(rendered, evidence):
+    """Compare visible TeX and recognition text without hiding real mismatches.
+
+    The vision adapter sometimes serializes a line break in a handwritten value
+    as ``\\textbackslash{} `` before the next line.  Treat that one generated
+    representation as whitespace for comparison; all other differences remain
+    strict and continue to fail closed.
+    """
+    if _normalized(rendered) == _normalized(evidence):
+        return True
+    repaired = re.sub(r"\\textbackslash\{\}", "\n", rendered)
+    return _normalized(repaired) == _normalized(evidence)
+
+
 def _overlaps(a, b):
     return min(a[2], b[2]) > max(a[0], b[0]) and min(a[3], b[3]) > max(a[1], b[1])
 
@@ -194,7 +208,7 @@ def select_exceptional_fields(tex, evidence, low_score=0.70):
                 raise ValueError(f"Field page mismatch: {fid}")
             seen.add(fid)
             segment = segments[fid]
-            if _normalized(segment["value"]) != _normalized(field["value"]):
+            if not _values_match(segment["value"], field["value"]):
                 raise ValueError(f"TeX/evidence value mismatch: {fid}")
             reasons = []
             if field.get("paddle_text") and _normalized(field["paddle_text"]) != _normalized(field["value"]):

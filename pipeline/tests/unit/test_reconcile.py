@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from texopt.optimization.reconcile import (
-    _normalized, field_segments, plain_value, reconcile_document, render_crop,
+    _normalized, _values_match, field_segments, plain_value, reconcile_document, render_crop,
     select_exceptional_fields,
 )
 
@@ -33,6 +33,11 @@ def evidence():
 def test_plain_value_normalizes_common_math_tex_to_evidence_text():
     rendered = r"$1\ensuremath{\times}10\textasciicircum{}6$"
     assert _normalized(plain_value(rendered)) == _normalized("1×10^6")
+
+
+def test_generated_textbackslash_line_break_matches_evidence_whitespace():
+    rendered = r"288735K\textbackslash{}042244K"
+    assert _values_match(rendered, "288735K\n042244K")
 
 
 def date_fixture(year="2023", month="07", day="28"):
