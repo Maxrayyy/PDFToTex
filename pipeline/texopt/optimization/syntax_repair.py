@@ -231,6 +231,7 @@ def normalize_text_mode_math_symbols(source: str) -> tuple[str, int]:
     """Make standalone diagonal cancellation marks valid in text-mode fields."""
     changed = 0
     out: list[str] = []
+    math_mode = False
     for line in source.splitlines(keepends=True):
         comment_at = len(line)
         for index, char in enumerate(line):
@@ -250,8 +251,25 @@ def normalize_text_mode_math_symbols(source: str) -> tuple[str, int]:
             changed += 1
             return rf"\ensuremath{{\{match.group('name')}}}"
 
-        out.append(TEXT_MODE_MATH_SYMBOL.sub(replace, line[:comment_at])
-                   + line[comment_at:])
+        visible = line[:comment_at]
+        pieces = []
+        cursor = 0
+        for token in re.finditer(r"(?<!\\)\$\$?|\\\(|\\\)|\\\[|\\\]", visible):
+            if not math_mode:
+                pieces.append(TEXT_MODE_MATH_SYMBOL.sub(replace, visible[cursor:token.start()]))
+            else:
+                pieces.append(visible[cursor:token.start()])
+            pieces.append(token.group())
+            if token.group() in {"$", "$$"}:
+                math_mode = not math_mode
+            elif token.group() in {r"\(", r"\["}:
+                math_mode = True
+            elif token.group() in {r"\)", r"\]"}:
+                math_mode = False
+            cursor = token.end()
+        tail = visible[cursor:]
+        pieces.append(TEXT_MODE_MATH_SYMBOL.sub(replace, tail) if not math_mode else tail)
+        out.append("".join(pieces) + line[comment_at:])
     return "".join(out), changed
 
 

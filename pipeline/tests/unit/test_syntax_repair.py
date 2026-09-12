@@ -127,6 +127,10 @@ class SyntaxRepairTests(unittest.TestCase):
         self.assertEqual(count, 1)
         self.assertEqual(repaired, r"300\ensuremath{\times} g 条件")
 
+    def test_math_mode_symbols_are_unchanged(self) -> None:
+        source = r"$300\times g$ and \(a\pm b\)"
+        self.assertEqual(normalize_text_mode_math_symbols(source), (source, 0))
+
     def test_zero_argument_spacing_commands_are_delimited_before_cjk(self) -> None:
         source = (
             "正文\\quad至\\qquad结束\n"
