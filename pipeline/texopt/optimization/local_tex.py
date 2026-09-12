@@ -10,7 +10,8 @@ from pylatexenc.macrospec import MacroSpec
 
 from .syntax_check import ENV_RE, _mask_verbatim
 from .syntax_repair import (normalize_control_word_boundaries, normalize_math_blank_lines,
-                            normalize_multicolumn_linebreaks, normalize_text_mode_math_symbols)
+                            normalize_multicolumn_linebreaks, normalize_text_mode_carets,
+                            normalize_text_mode_math_symbols)
 from .tex_tables import (_peel_prefix, _read_balanced, _skip_ws, alignment_colspec, iter_structural,
                          mask_comments, multicolumn_span, parse_colspec, split_align_body)
 
@@ -445,6 +446,7 @@ def normalize_tex(source):
         ("numeric_text_backslashes", normalize_numeric_text_backslashes),
         ("control_word_boundaries", normalize_control_word_boundaries),
         ("text_math_symbols", normalize_text_mode_math_symbols),
+        ("text_mode_carets", normalize_text_mode_carets),
         ("multicolumn_linebreaks", normalize_multicolumn_linebreaks),
         ("math_blank_lines", normalize_math_blank_lines),
         ("ulem_text_scripts", normalize_ulem_text_scripts),

@@ -273,6 +273,32 @@ def normalize_text_mode_math_symbols(source: str) -> tuple[str, int]:
     return "".join(out), changed
 
 
+def normalize_text_mode_carets(source: str) -> tuple[str, int]:
+    """Escape literal text-mode carets while preserving math expressions."""
+    changed = 0
+    out = []
+    math_mode = False
+    for line in source.splitlines(keepends=True):
+        visible, sep, comment = line.partition("%")
+        pieces, cursor = [], 0
+        for token in re.finditer(r"(?<!\\)\$\$?|\\\(|\\\)|\\\[|\\\]", visible):
+            chunk = visible[cursor:token.start()]
+            if not math_mode:
+                chunk, count = re.subn(r"(?<!\\)\^(?=[A-Za-z0-9{])", r"\\textasciicircum{}", chunk)
+                changed += count
+            pieces.append(chunk + token.group())
+            if token.group() in {"$", "$$"}: math_mode = not math_mode
+            elif token.group() in {r"\(", r"\["}: math_mode = True
+            else: math_mode = False
+            cursor = token.end()
+        chunk = visible[cursor:]
+        if not math_mode:
+            chunk, count = re.subn(r"(?<!\\)\^(?=[A-Za-z0-9{])", r"\\textasciicircum{}", chunk)
+            changed += count
+        out.append("".join(pieces) + chunk + (sep + comment if sep else ""))
+    return "".join(out), changed
+
+
 class LLMSyntaxRepairer:
     """Repair consecutive Lexoid-page batches and cache accepted responses."""
 
