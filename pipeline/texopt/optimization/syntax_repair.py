@@ -308,7 +308,7 @@ def normalize_stray_cjk_backslashes(source: str) -> tuple[str, int]:
 
 def normalize_standalone_newlines(source: str) -> tuple[str, int]:
     """Use paragraph breaks for standalone newlines in vertical text mode."""
-    return re.subn(r"(?m)^[ \t]*\\newline[ \t]*$", r"\\par", source)
+    return re.subn(r"(?m)^[ \t]*\\newline[ \t]*(?=(?:%[^\n]*)?$)", r"\\par", source)
 
 
 class LLMSyntaxRepairer:
