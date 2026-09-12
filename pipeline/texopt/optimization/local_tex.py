@@ -441,6 +441,31 @@ def normalize_unclosed_field_rows(source):
     return "".join(lines), changed
 
 
+def normalize_unclosed_tabular_specs(source):
+    """Close a truncated repeated-column specification on its begin line."""
+    lines = source.splitlines(keepends=True)
+    changed = 0
+    for index, line in enumerate(lines):
+        if r"\begin{tabular}" not in line or "*{" not in line:
+            continue
+        body = line.rstrip("\n")
+        depth = 0
+        escaped = False
+        for char in body:
+            if char == "{" and not escaped:
+                depth += 1
+            elif char == "}" and not escaped and depth:
+                depth -= 1
+            escaped = char == "\\" and not escaped
+            if char != "\\":
+                escaped = False
+        if depth == 1:
+            newline = "\n" if line.endswith("\n") else ""
+            lines[index] = body + "}" + newline
+            changed += 1
+    return "".join(lines), changed
+
+
 def normalize_uniform_table_overflow(source):
     """Expand a table spec only when every populated row has one extra cell."""
     edits = []
@@ -513,6 +538,7 @@ def normalize_tex(source):
         ("numeric_text_backslashes", normalize_numeric_text_backslashes),
         ("unclosed_makebox_rows", normalize_unclosed_makebox_rows),
         ("unclosed_field_rows", normalize_unclosed_field_rows),
+        ("unclosed_tabular_specs", normalize_unclosed_tabular_specs),
         ("control_word_boundaries", normalize_control_word_boundaries),
         ("text_math_symbols", normalize_text_mode_math_symbols),
         ("text_mode_carets", normalize_text_mode_carets),

@@ -13,7 +13,8 @@ from texopt.optimization.syntax_check import validate_latex
 from texopt.optimization.syntax_repair import normalize_math_blank_lines
 from texopt.optimization.local_tex import (normalize_uniform_table_overflow,
                                            normalize_unclosed_makebox_rows,
-                                           normalize_unclosed_field_rows)
+                                           normalize_unclosed_field_rows,
+                                           normalize_unclosed_tabular_specs)
 from texopt.core.textio import read_text_auto, write_utf8_atomic
 
 
@@ -65,6 +66,12 @@ class SyntaxTests(unittest.TestCase):
         repaired, count = normalize_unclosed_field_rows(source)
         self.assertEqual(count, 1)
         self.assertIn(r"\fieldvalue{\handwritten{checked}}", repaired)
+
+    def test_unclosed_repeated_tabular_spec_is_closed(self) -> None:
+        source = "\\begin{tabular}{c|*{12}{p{1.15cm}|}\n"
+        repaired, count = normalize_unclosed_tabular_specs(source)
+        self.assertEqual(count, 1)
+        self.assertIn(r"{c|*{12}{p{1.15cm}|}}", repaired)
 
     def test_strikeout_loads_missing_dependency_without_option_clash(self) -> None:
         for existing in ("", r"\usepackage{ulem}", r"\newcommand{\sout}[1]{#1}"):
