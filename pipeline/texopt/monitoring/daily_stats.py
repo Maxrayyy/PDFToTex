@@ -333,7 +333,8 @@ def poll(config, now=None):
             atomic_write(ledger, "".join(json.dumps(item, ensure_ascii=False) + "\n" for item in records))
         published = {str(path) for path in Path(config["publish_root"]).rglob("*.tex")}
         unmatched = sorted(published - {item["published_tex"] for item in records})
-        prices = read_json(config.get("pricing_file", Path(__file__).with_name("model_prices.json")))
+        default_prices = Path(__file__).parents[1] / "model_prices.json"
+        prices = read_json(config.get("pricing_file", default_prices))
         rows = daily_rows(records, today, config.get("start_date", today), prices)
         snapshot = {"checked_at": now.astimezone(ZONE).isoformat(timespec="seconds"),
                     "timezone": "Asia/Shanghai", "days": rows, "warnings": warnings,

@@ -60,6 +60,19 @@ python3 pipeline/texopt/monitoring/worker_watch.py once \\
 cat ../data/monitoring/realtime/latest.md
 ```
 
+## 每次优化后的必做验证
+
+任何识别、提示词、表格或 TeX 优化修改，都必须在报告中记录实际结果后才能完成：
+
+```bash
+python3 -m compileall -q Lexoid/lexoid pipeline/texopt
+docker compose run --rm --no-deps tests
+```
+
+对实际生成的 TeX，还必须执行结构检查和 XeLaTeX 编译；涉及版面或表格时，追加 PDF 渲染抽查和 SyncTeX/几何验证。验证失败时不得重建生产容器或宣称优化完成，应保留失败日志和输入文件到 `../data/fix/<任务名>/`。
+
+每次任务完成后，必须针对对应容器和对应 PDF 页面执行一次真实回归：从该容器读取最终 TeX/PDF，渲染代表性页面并检查输出，而不是只依赖单元测试或日志。页面检查结果、容器名称和产物路径必须记录在任务日志中。
+
 提交前检查：
 
 ```bash

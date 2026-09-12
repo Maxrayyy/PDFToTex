@@ -355,9 +355,35 @@ def inject_support(source):
     return source, int(source != original)
 
 
+def normalize_literal_model_newlines(source):
+    """Turn model-emitted ``\\n`` separators into real line breaks.
+
+    Do not touch control words such as ``\\newpage`` or ``\\noindent``: those
+    continue with a lowercase letter. Instrument output commonly emits the
+    literal separator before an uppercase row label, CJK text, or ``&``.
+    """
+    pattern = re.compile(r"\\n(?=[A-Z\u3400-\u9fff&]|\s*$)")
+    normalized = pattern.sub("\n", source)
+    return normalized, int(normalized != source)
+
+
+def normalize_numeric_text_backslashes(source):
+    """Escape doubled backslashes that model output placed before digits.
+
+    In instrument tables, identifiers such as ``A37...\\2605031`` are text.
+    TeX interprets the doubled slash as a row break, which creates phantom
+    columns/rows. A row break is followed by whitespace or a line ending, so
+    restricting this repair to a digit is safe for generated tables.
+    """
+    normalized = re.sub(r"\\\\(?=[0-9])", r"\\textbackslash{}", source)
+    return normalized, int(normalized != source)
+
+
 def normalize_tex(source):
     changes = {}
     for name, operation in (
+        ("literal_model_newlines", normalize_literal_model_newlines),
+        ("numeric_text_backslashes", normalize_numeric_text_backslashes),
         ("control_word_boundaries", normalize_control_word_boundaries),
         ("text_math_symbols", normalize_text_mode_math_symbols),
         ("multicolumn_linebreaks", normalize_multicolumn_linebreaks),

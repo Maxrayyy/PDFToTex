@@ -810,9 +810,21 @@ def cmd_optimise(a: argparse.Namespace) -> int:
                issue=issue.payload())
     output_errors = [issue for issue in output_issues if issue.severity == "error"]
     if output_errors:
-        _event("SYNTAX_BLOCKED", "optimized LaTeX failed structural validation",
-               level="ERROR", errors=len(output_errors))
-        return 4
+        # Field annotation must never make an otherwise valid document
+        # uncompilable. Keep the validated pre-annotation source as a safe
+        # fallback and report the degraded metadata explicitly.
+        fallback_issues = validate_latex(step1b, require_sync_safe=not a.allow_opaque)
+        fallback_errors = [issue for issue in fallback_issues if issue.severity == "error"]
+        if not fallback_errors:
+            out = step1b
+            output_issues = fallback_issues
+            _event("FIELD_ANNOTATION_ROLLBACK",
+                   "field annotation produced invalid TeX; kept validated source",
+                   level="WARNING", errors=len(output_errors))
+        else:
+            _event("SYNTAX_BLOCKED", "optimized LaTeX failed structural validation",
+                   level="ERROR", errors=len(output_errors))
+            return 4
     _event("SYNTAX_OK", "optimized LaTeX structural validation passed",
            warnings=sum(i.severity == "warning" for i in output_issues))
 

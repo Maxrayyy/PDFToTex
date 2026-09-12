@@ -160,7 +160,7 @@ def _complete_pages(path, total):
 
 
 def require_recognized_pages(path):
-    from .syntax_repair import split_lexoid_pages
+    from ..optimization.syntax_repair import split_lexoid_pages
     text = Path(path).read_text("utf-8")
     marker = re.compile(r"(?m)^\s*%\s*LEXOID_RECOGNITION_FALLBACK\b")
     if marker.search(text):

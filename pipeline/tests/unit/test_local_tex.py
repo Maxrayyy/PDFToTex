@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 import pytest
 
 from texopt.recognition.page_fallback import compile_page, upgrade_pages
-from test_page_fallback import sample
+from .test_page_fallback import sample
 
 
 # LaTeX 2026/06/01 text superscript path from latex2e/base/ltfloat.dtx.
@@ -27,7 +27,7 @@ TEXT_SCRIPTS_2026 = r"""
 
 
 def test_ulem_superscript_compiles_with_2026_text_implementation(tmp_path):
-    from .local_tex import normalize_tex
+    from texopt.optimization.local_tex import normalize_tex
 
     source = (r"\documentclass{article}\usepackage[normalem]{ulem}"
         + TEXT_SCRIPTS_2026 + r"\begin{document}\begin{tabular}{p{4cm}l}"
@@ -42,8 +42,28 @@ def test_ulem_superscript_compiles_with_2026_text_implementation(tmp_path):
     assert normalize_tex(fixed)[0] == fixed
 
 
+def test_model_text_separators_are_normalized_without_touching_commands():
+    from texopt.optimization.local_tex import normalize_tex
+
+    source = r"\begin{tabular}{ll}\hline\nA&X\\\end{tabular}\newpage\noindent"
+    fixed, changes = normalize_tex(source)
+    assert "\\hline\nA" in fixed
+    assert r"\newpage\noindent" in fixed
+    assert changes["literal_model_newlines"] == 1
+
+
+def test_numeric_backslashes_become_visible_text_not_row_breaks():
+    from texopt.optimization.local_tex import normalize_tex
+
+    source = r"A37Z20120\\2605031-1-0 & 0.19967\\"
+    fixed, changes = normalize_tex(source)
+    assert r"A37Z20120\textbackslash{}2605031-1-0" in fixed
+    assert fixed.endswith(r"0.19967\\")
+    assert changes["numeric_text_backslashes"] == 1
+
+
 def test_ulem_script_repair_preserves_fields_and_ignores_literals_and_boxes():
-    from .local_tex import normalize_tex
+    from texopt.optimization.local_tex import normalize_tex
 
     protected = (r"Outside \textsuperscript{TM} \verb|\sout{\textsuperscript{TM}}|"
         + "\n% \\sout{\\textsuperscript{TM}}\n"
@@ -60,7 +80,7 @@ def test_ulem_script_repair_preserves_fields_and_ignores_literals_and_boxes():
 @pytest.mark.parametrize("space", [r"\vspace{3cm}", r"\vspace*{3cm}",
     r"\rule[-\dimexpr3cm-\ht\strutbox\relax]{0pt}{3cm}"])
 def test_marked_experimental_spaces_become_frames(space):
-    from .local_tex import normalize_tex
+    from texopt.optimization.local_tex import normalize_tex
 
     source = "% LEXOID_OMITTED_EXPERIMENTAL_FIGURE\n" + space + r" & Signature\\"
     fixed, changes = normalize_tex(source)
@@ -72,7 +92,7 @@ def test_marked_experimental_spaces_become_frames(space):
 
 
 def test_experimental_frame_handles_trailing_marker_and_preserves_metadata(tmp_path):
-    from .local_tex import normalize_tex
+    from texopt.optimization.local_tex import normalize_tex
 
     cell = (r"\vspace{3cm}% LEXOID_OMITTED_EXPERIMENTAL_FIGURE" + "\n"
         + r"\par Signature \fieldvalue{Alice}")
@@ -97,7 +117,7 @@ SPLIT_FORM_ROW = (
 
 
 def test_split_form_row_restores_cells_without_changing_field_metadata():
-    from .local_tex import normalize_tex
+    from texopt.optimization.local_tex import normalize_tex
 
     fixed, changes = normalize_tex(SPLIT_FORM_ROW)
     assert changes.get("split_paragraph_rows") == 3
@@ -117,7 +137,7 @@ def test_split_form_row_restores_cells_without_changing_field_metadata():
     r"\hline A & B\tabularnewline \fieldvalue{C}\\\hline",
 ])
 def test_complete_sparse_and_explicit_rows_are_not_merged(body):
-    from .local_tex import normalize_tex
+    from texopt.optimization.local_tex import normalize_tex
 
     source = r"\begin{tabular}{p{2cm}p{3cm}}" + body + r"\end{tabular}"
     assert normalize_tex(source)[0] == source
@@ -135,7 +155,7 @@ NESTED_FORM_ROW = (
 
 
 def test_nested_form_instructions_are_rejoined_without_changing_result_rows():
-    from .local_tex import normalize_tex
+    from texopt.optimization.local_tex import normalize_tex
     from .syntax_check import validate_latex
     from .syntax_repair import repair_invariant_violations
 
@@ -156,14 +176,14 @@ def test_nested_form_instructions_are_rejoined_without_changing_result_rows():
     (r"p{5cm}", "l"),
 ])
 def test_ambiguous_nested_form_rows_are_unchanged(old, new):
-    from .local_tex import normalize_split_paragraph_rows
+    from texopt.optimization.local_tex import normalize_split_paragraph_rows
 
     source = NESTED_FORM_ROW.replace(old, new)
     assert normalize_split_paragraph_rows(source) == (source, 0)
 
 
 def test_nested_form_results_render_in_result_column(tmp_path):
-    from .local_tex import normalize_tex
+    from texopt.optimization.local_tex import normalize_tex
 
     source = (r"\documentclass{article}\usepackage{array,multirow}"
               r"\newcommand{\fieldvalue}[1]{#1}\begin{document}" + NESTED_FORM_ROW
@@ -185,7 +205,7 @@ def test_nested_form_results_render_in_result_column(tmp_path):
 
 
 def test_heading_ends_before_block_table_but_inline_and_nested_tables_remain():
-    from .local_tex import normalize_tex
+    from texopt.optimization.local_tex import normalize_tex
 
     block = "\\par\\noindent 1.1. Equipment:\n\\noindent\\begin{tabular}{ll}A & B\\\\\\end{tabular}"
     fixed, changes = normalize_tex(block)
@@ -201,7 +221,7 @@ def test_heading_ends_before_block_table_but_inline_and_nested_tables_remain():
 
 
 def test_rendered_fields_stay_in_their_column_and_heading_is_above_table(tmp_path):
-    from .local_tex import normalize_tex
+    from texopt.optimization.local_tex import normalize_tex
 
     source = (r"\documentclass{article}\begin{document}" + "\n"
               + SPLIT_FORM_ROW + "\n\\par\\noindent 1.1. Equipment:\n"
@@ -258,7 +278,7 @@ def test_known_local_errors_are_repaired_before_any_paid_upgrade(tmp_path, body)
 
 
 def test_shared_normalization_is_idempotent_and_keeps_fields_and_nested_tables():
-    from .local_tex import normalize_tex
+    from texopt.optimization.local_tex import normalize_tex
 
     fields = "% #VALUE_ID: LEX-P0001-V0001\n% #FIELD_VALUE: Original label\n\\fieldvalue{23.5}"
     table = r"\begin{tabular}{ll}a & \begin{tabular}{l}b\\\hline c\end{tabular}\\\hline\end{tabular}"

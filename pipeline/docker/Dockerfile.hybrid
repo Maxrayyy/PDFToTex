@@ -32,6 +32,28 @@ FROM runtime AS test
 RUN python -m pip install pytest pytest-asyncio
 COPY Lexoid/tests /tests/lexoid
 COPY pipeline /tests/pipeline
+COPY pipeline/texopt/model_prices.json /tests/pipeline/tests/unit/model_prices.json
 ENV PYTHONPATH=/tests/pipeline
+RUN ln -sf /src/texopt/optimization/cli.py /tests/pipeline/tests/unit/cli.py \
+    && ln -sf /src/texopt/optimization/llm.py /tests/pipeline/tests/unit/llm.py \
+    && ln -sf /src/texopt/optimization/naming_cache.py /tests/pipeline/tests/unit/naming_cache.py \
+    && ln -sf /src/texopt/optimization/semantic_naming.py /tests/pipeline/tests/unit/semantic_naming.py \
+    && ln -sf /src/texopt/optimization/fields.py /tests/pipeline/tests/unit/fields.py \
+    && ln -sf /src/texopt/optimization/page_layout.py /tests/pipeline/tests/unit/page_layout.py \
+    && ln -sf /src/texopt/optimization/publication.py /tests/pipeline/tests/unit/publication.py \
+    && ln -sf /src/texopt/runtime/partitions.py /tests/pipeline/tests/unit/partitions.py \
+    && ln -sf /src/texopt/runtime/stages.py /tests/pipeline/tests/unit/stages.py \
+    && ln -sf /src/texopt/optimization/syntax_check.py /tests/pipeline/tests/unit/syntax_check.py \
+    && ln -sf /src/texopt/optimization/syntax_repair.py /tests/pipeline/tests/unit/syntax_repair.py \
+    && ln -sf /src/texopt/optimization/local_tex.py /tests/pipeline/tests/unit/local_tex.py \
+    && ln -sf /src/texopt/optimization/opaque.py /tests/pipeline/tests/unit/opaque.py \
+    && ln -sf /src/texopt/optimization/reconcile.py /tests/pipeline/tests/unit/reconcile.py \
+    && ln -sf /src/texopt/optimization/acceptance.py /tests/pipeline/tests/unit/acceptance.py \
+    && ln -sf /src/texopt/optimization/checks.py /tests/pipeline/tests/unit/checks.py \
+    && ln -sf /src/texopt/optimization/outline.py /tests/pipeline/tests/unit/outline.py \
+    && ln -sf /src/texopt/optimization/preamble.py /tests/pipeline/tests/unit/preamble.py \
+    && ln -sf /src/texopt/optimization/tex_tables.py /tests/pipeline/tests/unit/tex_tables.py \
+    && ln -sf /src/texopt/recognition/page_fallback.py /tests/pipeline/tests/unit/page_fallback.py \
+    && ln -sf /src/texopt/runtime/pipeline_state.py /tests/pipeline/tests/unit/pipeline_state.py
 WORKDIR /tests/run
-CMD ["python", "-m", "pytest", "-q", "/tests/pipeline/tests/unit", "/tests/pipeline/tests", "/tests/lexoid", "--ignore=/tests/lexoid/test_cli.py", "--ignore=/tests/lexoid/test_parser.py", "--ignore=/tests/lexoid/test_web_parsing.py"]
+CMD ["sh", "-c", "python -m pytest -q --import-mode=importlib /tests/pipeline/tests/unit /tests/pipeline/tests && python -m pytest -q --import-mode=importlib /tests/lexoid --ignore=/tests/lexoid/test_cli.py --ignore=/tests/lexoid/test_parser.py --ignore=/tests/lexoid/test_web_parsing.py"]
