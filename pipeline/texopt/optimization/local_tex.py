@@ -8,7 +8,7 @@ from pylatexenc.latexwalker import (LatexWalker, LatexEnvironmentNode, LatexMacr
                                    get_default_latex_context_db)
 from pylatexenc.macrospec import MacroSpec
 
-from .syntax_check import _mask_verbatim
+from .syntax_check import ENV_RE, _mask_verbatim
 from .syntax_repair import (normalize_control_word_boundaries, normalize_math_blank_lines,
                             normalize_multicolumn_linebreaks, normalize_text_mode_math_symbols)
 from .tex_tables import (_peel_prefix, _read_balanced, _skip_ws, alignment_colspec, iter_structural,
@@ -411,6 +411,33 @@ def normalize_uniform_table_overflow(source):
     return source, len(edits)
 
 
+def normalize_page_boundary_closures(source):
+    """Close unambiguous groups/environments before a page completion marker."""
+    marker = re.compile(r"\n(?=%\s*LEXOID_PAGE_COMPLETED:\s*\d+/\d+)")
+    edits = []
+    start = 0
+    for match in marker.finditer(source):
+        segment = source[start:match.start()]
+        masked = _mask_verbatim(mask_comments(segment))
+        depth = 0
+        for ch in masked:
+            if ch == "{": depth += 1
+            elif ch == "}" and depth: depth -= 1
+        envs = [m.group(2) for m in ENV_RE.finditer(masked)
+                if m.group(1) == "begin"]
+        for m in ENV_RE.finditer(masked):
+            if m.group(1) == "end" and m.group(2) in envs:
+                envs.remove(m.group(2))
+        closers = "}" * depth + "".join(rf"\end{{{env}}}" for env in reversed(envs)
+                                         if env in {"tabular", "tabularx", "table"})
+        if closers:
+            edits.append((match.start(), closers))
+        start = match.end()
+    for position, text in reversed(edits):
+        source = source[:position] + text + source[position:]
+    return source, len(edits)
+
+
 def normalize_tex(source):
     changes = {}
     for name, operation in (
@@ -427,6 +454,7 @@ def normalize_tex(source):
         ("table_row_endings", normalize_table_row_endings),
         ("table_heading_breaks", normalize_table_heading_breaks),
         ("uniform_table_overflow", normalize_uniform_table_overflow),
+        ("page_boundary_closures", normalize_page_boundary_closures),
         ("missing_support", inject_support),
     ):
         source, count = operation(source)
