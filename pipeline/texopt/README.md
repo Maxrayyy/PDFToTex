@@ -84,6 +84,8 @@ Kimi 价格未配置时费用保持未知，不能按 GPT 价格计费；独立�
 
 ### 本地容器监测
 
+以下命令均从 `PDFToTex/` 根目录执行。
+
 `worker_watch.py` 仅使用 Python 标准库和本机 Docker CLI，通过 macOS `launchd`
 定时读取容器状态、流水线状态库和增量日志。默认不调用模型、不重启识别任务；
 显式启用 `auto_restart.enabled` 后，可恢复符合条件的网络暂停容器，恢复后转换会继续调用模型。
@@ -96,9 +98,9 @@ SHA-256 三者一致时，将该文件原样归位到 `output_tex`，不覆盖�
 所有目标均终止且没有待执行自动重启时自动卸载定时任务；新批次启动后需要重新安装。
 
 ```sh
-python3 texopt/monitoring/worker_watch.py install --config /绝对路径/config.json
-python3 texopt/monitoring/worker_watch.py once --config /绝对路径/config.json
-python3 texopt/monitoring/worker_watch.py stop --config /绝对路径/config.json
+python3 pipeline/texopt/monitoring/worker_watch.py install --config /绝对路径/config.json
+python3 pipeline/texopt/monitoring/worker_watch.py once --config /绝对路径/config.json
+python3 pipeline/texopt/monitoring/worker_watch.py stop --config /绝对路径/config.json
 ```
 
 监测目录中的 `latest.md` 是中文状态摘要，`latest.json` 保存结构化详情，
@@ -127,9 +129,9 @@ python3 texopt/monitoring/worker_watch.py stop --config /绝对路径/config.jso
 定时任务安装到 `~/Library/LaunchAgents/`，后续登录继续运行，不随当前 worker 退出而停止。
 
 ```sh
-python3 texopt/monitoring/daily_stats.py once --config /绝对路径/daily/config.json
-python3 texopt/monitoring/daily_stats.py install --config /绝对路径/daily/config.json
-python3 texopt/monitoring/daily_stats.py stop --config /绝对路径/daily/config.json
+python3 pipeline/texopt/monitoring/daily_stats.py once --config /绝对路径/daily/config.json
+python3 pipeline/texopt/monitoring/daily_stats.py install --config /绝对路径/daily/config.json
+python3 pipeline/texopt/monitoring/daily_stats.py stop --config /绝对路径/daily/config.json
 ```
 
 配置指定 `scan_roots`（worker 数据目录）、`source_root`（原始 PDF 根目录）、
