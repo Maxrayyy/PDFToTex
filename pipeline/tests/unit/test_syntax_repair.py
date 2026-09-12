@@ -127,6 +127,31 @@ class SyntaxRepairTests(unittest.TestCase):
         self.assertEqual(count, 1)
         self.assertEqual(repaired, r"1\ensuremath{\times}10 条件")
 
+    def test_text_mode_math_font_command_is_safe(self) -> None:
+        source = r"(100\,\mathrm{pg}/\mathrm{mL})"
+        repaired, count = normalize_text_mode_math_symbols(source)
+        self.assertEqual(count, 2)
+        self.assertEqual(
+            repaired,
+            r"(100\,\ensuremath{\mathrm{pg}}/\ensuremath{\mathrm{mL}})",
+        )
+        self.assertEqual(normalize_text_mode_math_symbols(repaired), (repaired, 0))
+
+    def test_escaped_text_relation_does_not_leave_dangling_math_delimiter(self) -> None:
+        source = r"标准0001\$>$最大值 / 阴性\$<$最小值"
+        repaired, count = normalize_text_mode_math_symbols(source)
+        self.assertEqual(count, 2)
+        self.assertEqual(
+            repaired,
+            r"标准0001\ensuremath{>}最大值 / 阴性\ensuremath{<}最小值",
+        )
+
+    def test_split_math_unit_is_joined_into_one_math_fragment(self) -> None:
+        source = r"100--1000$\mu$l$ 规格"
+        repaired, count = normalize_text_mode_math_symbols(source)
+        self.assertEqual(count, 1)
+        self.assertEqual(repaired, r"100--1000$\mu l$ 规格")
+
     def test_math_mode_symbols_are_unchanged(self) -> None:
         source = r"$300\times g$ and \(a\pm b\)"
         self.assertEqual(normalize_text_mode_math_symbols(source), (source, 0))
@@ -555,6 +580,42 @@ class SyntaxRepairTests(unittest.TestCase):
 
             self.assertEqual(result, 6)
             self.assertFalse(output.exists())
+
+    def test_cli_rejects_model_candidate_that_introduces_table_errors(self) -> None:
+        from . import cli
+
+        class HarmfulRepairer:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def repair_document(self, source: str, **kwargs):
+                return source.replace("a & b", "a & b & c"), SimpleNamespace(
+                    batches=1, cache=0, deterministic_end_documents_removed=0,
+                    failed=0, llm=1, pages=1, rejected=0, unchanged=0,
+                )
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "valid.tex"
+            output = root / "output.tex"
+            source.write_text(
+                "\\begin{document}\n\\begin{tabular}{ll}\na & b\\\\\n"
+                "\\end{tabular}\n% LEXOID_PAGE_COMPLETED: 1/1\n"
+                "\\end{document}\n",
+                encoding="utf-8",
+            )
+            with mock.patch.object(cli, "LLMSyntaxRepairer", HarmfulRepairer):
+                result = cli.main([
+                    "optimise", str(source), "-o", str(output),
+                    "--llm-syntax-repair", "--no-preamble", "--no-anchor",
+                ])
+
+            self.assertEqual(result, 0)
+            self.assertTrue(output.exists())
+            self.assertIn(
+                "SYNTAX_REPAIR_REJECTED",
+                output.with_suffix(".texopt.log").read_text("utf-8"),
+            )
 
     def test_failed_request_is_not_reported_as_llm_unchanged(self) -> None:
         events = []

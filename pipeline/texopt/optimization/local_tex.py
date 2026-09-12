@@ -487,11 +487,20 @@ def normalize_uniform_table_overflow(source):
                 if any(cell.text.strip() for cell in row.cells)]
         spans = [sum(multicolumn_span(cell.text) for cell in row.cells) for row in rows]
         overflow = sum(span == expected + 1 for span in spans)
-        # Wide instrument grids often omit one trailing column from the
-        # specification while keeping that column in the header/data rows.
-        # Require a wide table and a clear majority before repairing; complex
+        longest_overflow_run = 0
+        current_overflow_run = 0
+        for span in spans:
+            if span == expected + 1:
+                current_overflow_run += 1
+                longest_overflow_run = max(longest_overflow_run, current_overflow_run)
+            else:
+                current_overflow_run = 0
+        # A table may omit one trailing column from its specification while
+        # keeping that column in a consecutive header/data run.  Require a
+        # repeated run for narrow forms and reject any larger overflow; mixed
         # narrow forms remain untouched for visual fallback.
-        if (expected < 8 or len(spans) < 2 or overflow < max(2, (len(spans) + 1) // 2)
+        if (expected < 7 and (expected < 2 or len(spans) < 2
+                             or longest_overflow_run < 2)
                 or any(span > expected + 1 for span in spans)):
             continue
         spec_pos = head.rfind("{" + spec + "}")

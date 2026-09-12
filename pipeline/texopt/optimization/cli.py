@@ -366,6 +366,48 @@ def cmd_optimise(a: argparse.Namespace) -> int:
         syntax_repair_stats = vars(repair_stats)
         repaired_issues = validate_latex(src, require_sync_safe=False)
         repaired_errors = [i for i in repaired_issues if i.severity == "error"]
+        # A model repair must not turn a structurally valid input into an invalid
+        # document.  This is especially important for complex tables: underfull
+        # rows are deferred warnings, while a model can accidentally introduce
+        # hard overfull alignment errors while trying to repair them.  Keep the
+        # locally normalized source in that case and let the optimizer handle
+        # the original warning deterministically.
+        if repaired_errors:
+            original_issues = validate_latex(repair_input, require_sync_safe=False)
+            original_errors = [issue for issue in original_issues if issue.severity == "error"]
+            original_underfull_only = bool(original_errors) and all(
+                issue.code == "TABLE_ALIGNMENT_UNDERFULL" for issue in original_errors
+            )
+            candidate_introduced_hard_alignment = any(
+                issue.code == "TABLE_ALIGNMENT_MISMATCH" for issue in repaired_errors
+            )
+            if not original_errors or (
+                original_underfull_only and candidate_introduced_hard_alignment
+            ):
+                src = repair_input
+                src, _ = normalize_tex(src)
+                repaired_issues = validate_latex(src, require_sync_safe=False)
+                repaired_errors = [
+                    issue for issue in repaired_issues if issue.severity == "error"
+                ]
+                _event(
+                    "SYNTAX_REPAIR_REJECTED",
+                    "discarded model candidate that introduced structural errors",
+                    level="WARNING", introduced_errors=len(repaired_errors),
+                    policy="retain_locally_normalized_input",
+                )
+        # Underfull rows are a recoverable layout warning.  Keep them visible in
+        # the audit log, but do not block the optimizer from applying its table
+        # conversion and compile checks.
+        if repaired_errors and all(
+            issue.code == "TABLE_ALIGNMENT_UNDERFULL" for issue in repaired_errors
+        ):
+            _event(
+                "SYNTAX_REPAIR_DEFERRED",
+                "underfull table rows deferred to optimizer",
+                level="WARNING", errors=len(repaired_errors),
+            )
+            repaired_errors = []
         targeted_retry_stats = None
         targeted_attempt = 0
         while (repaired_errors and not repair_stats.failed

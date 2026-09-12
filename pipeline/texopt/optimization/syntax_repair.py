@@ -45,6 +45,12 @@ CONTROL_WORD_BEFORE_CJK = re.compile(
 TEXT_MODE_MATH_SYMBOL = re.compile(
     r"(?<!\\ensuremath\{)\\(?P<name>diagup|diagdown|times|pm|ge|le|neq|circ)(?![A-Za-z@])"
 )
+TEXT_MODE_MATH_COMMAND = re.compile(
+    r"(?<!\\)\\(?P<name>mathrm|mathbf|mathit|mathsf|mathtt|mathcal|mathbb)"
+    r"\{(?P<body>[^{}\n]*)\}"
+)
+TEXT_MODE_ESCAPED_RELATION = re.compile(r"\\\$([<>])\$")
+TEXT_MODE_SPLIT_MATH_UNIT = re.compile(r"\$(\\[A-Za-z]+)\$([A-Za-z])\$")
 
 SYSTEM_PROMPT = """\
 You are a conservative XeLaTeX syntax repair engine. The input is a numbered LaTeX
@@ -143,7 +149,7 @@ def normalize_multicolumn_linebreaks(source: str) -> tuple[str, int]:
         if not first or not second or not third:
             i = command.end()
             continue
-        if re.search(r"(?:^|[^\\])[pmb]\s*\{", second[0]):
+        if re.search(r"(?<!\\)[plmrc]", second[0]):
             tokens = list(iter_structural(third[0], inside_alignment=True))
             nested: list[tuple[int, int]] = []
             nested_start = None
@@ -251,7 +257,27 @@ def normalize_text_mode_math_symbols(source: str) -> tuple[str, int]:
             changed += 1
             return rf"\ensuremath{{\{match.group('name')}}}"
 
+        def replace_command(match: re.Match[str]) -> str:
+            nonlocal changed
+            if visible[:match.start()].endswith(r"\ensuremath{"):
+                return match.group(0)
+            changed += 1
+            return rf"\ensuremath{{\{match.group('name')}{{{match.group('body')}}}}}"
+
+        def replace_relation(match: re.Match[str]) -> str:
+            nonlocal changed
+            changed += 1
+            return rf"\ensuremath{{{match.group(1)}}}"
+
+        def replace_split_unit(match: re.Match[str]) -> str:
+            nonlocal changed
+            changed += 1
+            return rf"${match.group(1)} {match.group(2)}$"
+
         visible = line[:comment_at]
+        visible = TEXT_MODE_SPLIT_MATH_UNIT.sub(replace_split_unit, visible)
+        visible = TEXT_MODE_MATH_COMMAND.sub(replace_command, visible)
+        visible = TEXT_MODE_ESCAPED_RELATION.sub(replace_relation, visible)
         pieces = []
         cursor = 0
         for token in re.finditer(r"(?<!\\)\$\$?|\\\(|\\\)|\\\[|\\\]", visible):

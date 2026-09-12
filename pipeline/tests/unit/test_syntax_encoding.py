@@ -53,6 +53,12 @@ class SyntaxTests(unittest.TestCase):
         repaired, count = normalize_uniform_table_overflow(source)
         self.assertEqual((repaired, count), (source, 0))
 
+    def test_narrow_uniform_table_overflow_adds_trailing_column(self) -> None:
+        source = "\\begin{tabular}{c|c|c}\n" + "a&b&c&d\\\\\n" * 3 + "\\end{tabular}"
+        repaired, count = normalize_uniform_table_overflow(source)
+        self.assertEqual(count, 1)
+        self.assertIn(r"{c|c|cl}", repaired)
+
     def test_unclosed_makebox_is_closed_only_before_row_break(self) -> None:
         source = r"\underline{\makebox[4cm][c]{\fieldvalue{\handwritten{14:16}}}\\" + "\n"
         repaired, count = normalize_unclosed_makebox_rows(source)
