@@ -795,6 +795,12 @@ def cmd_optimise(a: argparse.Namespace) -> int:
     out, records, name_stats = annotate_fields(step1b, start_page=a.start_page,
                                                detector=cfg, namer=namer,
                                                naming_requests=naming_requests)
+    # Field annotation can reassemble model text and reintroduce literal
+    # separators or numeric backslashes. Normalize at the final TeX boundary.
+    out, final_tex_normalization = normalize_tex(out)
+    if final_tex_normalization:
+        _event("FINAL_TEX_NORMALIZED", "normalized final annotated TeX",
+               changes=final_tex_normalization)
     _event("FIELD_SCAN", "field annotation completed", fields=len(records),
            naming=name_stats)
     for record in records:
