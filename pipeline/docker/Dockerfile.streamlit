@@ -22,8 +22,8 @@ RUN apt-get update && \
 RUN pip install --no-cache-dir "streamlit>=1.38"
 
 WORKDIR /app
-COPY texopt/ ./texopt/
-COPY app.py ./
+COPY pipeline/texopt/ ./texopt/
+COPY pipeline/app.py ./
 
 EXPOSE 8501
 

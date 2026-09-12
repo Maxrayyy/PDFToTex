@@ -10,6 +10,15 @@ spec.loader.exec_module(runner)
 
 
 class PublicationPaths(unittest.TestCase):
+    def test_queue_scripts_use_refactored_package_paths(self):
+        root = Path(__file__).parent
+        for relative in ('run-sequential-queue.py', 'resume-none/run.py'):
+            source = (root / relative).read_text(encoding='utf-8')
+            self.assertNotIn('from texopt.stages', source)
+            self.assertNotIn('from texopt.textio', source)
+            self.assertIn('from texopt.runtime.stages', source)
+            self.assertIn('from texopt.core.textio', source)
+
     def test_cross_unit_batches_keep_source_directories(self):
         config = SimpleNamespace(publish_root='/data/optimized')
         for relative in ('U1/batches/A37Z201202605032/one.pdf',

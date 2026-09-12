@@ -61,4 +61,4 @@ RUN ln -sf /src/texopt/optimization/cli.py /tests/pipeline/tests/unit/cli.py \
     && ln -sfn /src/texopt/runtime /tests/pipeline/tests/runtime \
     && ln -sf /src/texopt/runtime/pdf_batch.py /tests/pipeline/tests/unit/pdf_batch.py
 WORKDIR /tests/run
-CMD ["sh", "-c", "python -m pytest -q --import-mode=importlib /tests/pipeline/tests/unit /tests/pipeline/tests && python -m pytest -q --import-mode=importlib /tests/lexoid --ignore=/tests/lexoid/test_cli.py --ignore=/tests/lexoid/test_parser.py --ignore=/tests/lexoid/test_web_parsing.py"]
+CMD ["sh", "-c", "python -m pytest -q --import-mode=importlib --rootdir=/tests/run /tests/pipeline/tests/unit /tests/pipeline/tests && python -m pytest -q --import-mode=importlib --rootdir=/tests/run /tests/lexoid --ignore=/tests/lexoid/test_cli.py --ignore=/tests/lexoid/test_parser.py --ignore=/tests/lexoid/test_web_parsing.py"]

@@ -12,8 +12,8 @@ import sys
 
 import pypdfium2 as pdfium
 
-from texopt.stages import BatchConfig, run_batch
-from texopt.textio import write_utf8_atomic
+from texopt.runtime.stages import BatchConfig, run_batch
+from texopt.core.textio import write_utf8_atomic
 
 
 def now():

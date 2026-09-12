@@ -14,8 +14,8 @@ from lexoid.core.recognition.cache import RecognitionCache, build_cache_key
 from lexoid.core.recognition.models import RecognitionConfig
 from lexoid.core.recognition.service import PageRecognizer
 from lexoid.core.recognition.vision import PROMPT_VERSION
-from texopt.stages import BatchConfig, _run, artifact_paths, run_batch
-from texopt.textio import write_utf8_atomic
+from texopt.runtime.stages import BatchConfig, _run, artifact_paths, run_batch
+from texopt.core.textio import write_utf8_atomic
 
 
 def save(path, data):

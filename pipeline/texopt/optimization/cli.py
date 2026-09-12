@@ -175,18 +175,30 @@ def _risks(src: str) -> list:
 
 _HANDWRITTEN_VALUE = re.compile(r"\\handwritten\{([^{}]*)\}")
 _HANDWRITTEN_SCI = re.compile(r"(?<![A-Za-z0-9])([0-9]+(?:[.][0-9]+)?)\^([0-9]+)")
+_HANDWRITTEN_MATH = re.compile(r"\$(?:\\.|[^$])*\$")
 _HANDWRITTEN_ESCAPES = {"&": r"\&", "%": r"\%", "$": r"\$", "#": r"\#",
                         "_": r"\_", "~": r"\textasciitilde{}", "^": r"\textasciicircum{}"}
 
 
 def sanitize_handwritten_fields(src: str) -> str:
-    def replace(match: re.Match[str]) -> str:
-        value, out, end = match.group(1), [], 0
+    def escape_literal(value: str) -> str:
+        out, end = [], 0
         for sci in _HANDWRITTEN_SCI.finditer(value):
-            out.append("".join(_HANDWRITTEN_ESCAPES.get(c, c) for c in value[end:sci.start()]))
+            out.append("".join(_HANDWRITTEN_ESCAPES.get(c, c)
+                               for c in value[end:sci.start()]))
             out.append(sci.group(1) + r"\textsuperscript{" + sci.group(2) + "}")
             end = sci.end()
         out.append("".join(_HANDWRITTEN_ESCAPES.get(c, c) for c in value[end:]))
+        return "".join(out)
+
+    def replace(match: re.Match[str]) -> str:
+        value = match.group(1)
+        out, cursor = [], 0
+        for math in _HANDWRITTEN_MATH.finditer(value):
+            out.append(escape_literal(value[cursor:math.start()]))
+            out.append(math.group(0))
+            cursor = math.end()
+        out.append(escape_literal(value[cursor:]))
         return r"\handwritten{" + "".join(out) + "}"
     return _HANDWRITTEN_VALUE.sub(replace, src)
 

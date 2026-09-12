@@ -11,13 +11,13 @@ services:
   # ── Streamlit web UI ─────────────────────────────────────
   streamlit:
     build:
-      context: .
-      dockerfile: Dockerfile.streamlit
+      context: ../..
+      dockerfile: pipeline/docker/Dockerfile.streamlit
     ports:
       - "${STREAMLIT_PORT:-8501}:8501"
     volumes:
       # Project code (live-reload during development)
-      - ./:/app
+      - ../../pipeline:/app
       # User's working directory for file I/O
       - ${WORK_DIR:-~/Downloads}:/data
       # Docker socket — allows launching sibling lexoid containers
