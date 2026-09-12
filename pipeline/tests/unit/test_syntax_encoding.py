@@ -15,6 +15,7 @@ from texopt.optimization.local_tex import (normalize_uniform_table_overflow,
                                            normalize_unclosed_makebox_rows,
                                            normalize_unclosed_field_rows,
                                            normalize_unclosed_tabular_specs)
+from texopt.optimization.reconcile import escape_handwritten_tex
 from texopt.core.textio import read_text_auto, write_utf8_atomic
 
 
@@ -72,6 +73,10 @@ class SyntaxTests(unittest.TestCase):
         repaired, count = normalize_unclosed_tabular_specs(source)
         self.assertEqual(count, 1)
         self.assertIn(r"{c|*{12}{p{1.15cm}|}}", repaired)
+
+    def test_handwritten_inline_math_is_preserved(self) -> None:
+        value = r"100--1000$\mu$l"
+        self.assertEqual(escape_handwritten_tex(value), value)
 
     def test_strikeout_loads_missing_dependency_without_option_clash(self) -> None:
         for existing in ("", r"\usepackage{ulem}", r"\newcommand{\sout}[1]{#1}"):

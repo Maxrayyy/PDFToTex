@@ -42,10 +42,23 @@ def escape_tex(value):
 
 
 _SCI_NOTATION = re.compile(r"(?<![A-Za-z0-9])([0-9]+(?:[.][0-9]+)?)\^([0-9]+)")
+_MATH_FRAGMENT = re.compile(r"\$(?:\\.|[^$])*\$")
 
 
 def escape_handwritten_tex(value):
     """Render handwritten text literally, with scientific notation as superscript."""
+    # Units and scientific values may contain an explicit inline math fragment
+    # (for example ``100--1000$\\mu$l``). Preserve that fragment while keeping
+    # ordinary handwritten text fully escaped.
+    fragments = []
+    cursor = 0
+    for match in _MATH_FRAGMENT.finditer(value):
+        fragments.append(escape_tex(value[cursor:match.start()]))
+        fragments.append(match.group(0))
+        cursor = match.end()
+    if fragments:
+        fragments.append(escape_tex(value[cursor:]))
+        return "".join(fragments)
     parts = []
     end = 0
     for match in _SCI_NOTATION.finditer(value):
