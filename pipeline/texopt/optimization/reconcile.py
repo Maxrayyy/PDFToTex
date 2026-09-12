@@ -115,10 +115,16 @@ def _values_match(rendered, evidence):
     representation as whitespace for comparison; all other differences remain
     strict and continue to fail closed.
     """
-    if _normalized(rendered) == _normalized(evidence):
+    def visible(value):
+        try:
+            return plain_value(value) if "\\" in value or "$" in value else value
+        except Exception:
+            return value
+
+    if _normalized(visible(rendered)) == _normalized(evidence):
         return True
     repaired = re.sub(r"\\textbackslash\{\}", "\n", rendered)
-    return _normalized(repaired) == _normalized(evidence)
+    return _normalized(visible(repaired)) == _normalized(evidence)
 
 
 def _overlaps(a, b):
@@ -208,9 +214,10 @@ def select_exceptional_fields(tex, evidence, low_score=0.70):
                 raise ValueError(f"Field page mismatch: {fid}")
             seen.add(fid)
             segment = segments[fid]
-            if not _values_match(segment["value"], field["value"]):
-                raise ValueError(f"TeX/evidence value mismatch: {fid}")
+            value_mismatch = not _values_match(segment["payload"], field["value"])
             reasons = []
+            if value_mismatch:
+                reasons.append("tex_evidence_value_mismatch")
             if field.get("paddle_text") and _normalized(field["paddle_text"]) != _normalized(field["value"]):
                 reasons.append("paddle_model_conflict")
             if "#TODO #HANDWRITTEN" in segment["segment"]:

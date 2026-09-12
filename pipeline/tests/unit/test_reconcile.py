@@ -40,6 +40,14 @@ def test_generated_textbackslash_line_break_matches_evidence_whitespace():
     assert _values_match(rendered, "288735K\n042244K")
 
 
+def test_field_payload_textbackslash_line_break_matches_evidence():
+    tex = TEX.replace("Chang", r"288735K\textbackslash{}042244K")
+    ev = evidence()
+    ev["pages"][0]["fields"][0]["value"] = "288735K\n042244K"
+    assert not any("handwritten_value_mismatch" in c.reasons
+                   for c in select_exceptional_fields(tex, ev))
+
+
 def date_fixture(year="2023", month="07", day="28"):
     ev = evidence()
     ev["pages"][0]["ocr_blocks"] = []
@@ -262,8 +270,14 @@ def test_unresolved_reply_preserves_guess_and_review_marker(tmp_path, adapter):
 
 
 def test_selector_rejects_tex_evidence_value_mismatch():
-    with pytest.raises(ValueError, match="value"):
-        select_exceptional_fields(TEX.replace("{Chang}", "{Changed}"), evidence())
+    printed = TEX.replace(r"\fieldvalue{\handwritten{Chang}}", r"\fieldvalue{Changed}")
+    candidates = select_exceptional_fields(printed, evidence())
+    assert "tex_evidence_value_mismatch" in candidates[0].reasons
+
+
+def test_handwritten_value_mismatch_is_reviewed_without_aborting():
+    candidates = select_exceptional_fields(TEX.replace("{Chang}", "{Changed}"), evidence())
+    assert "tex_evidence_value_mismatch" in candidates[0].reasons
 
 
 @pytest.mark.parametrize("latex,visible", [
