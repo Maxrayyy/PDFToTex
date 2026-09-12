@@ -350,6 +350,7 @@ def cmd_optimise(a: argparse.Namespace) -> int:
         src, repair_stats = repairer.repair_document(src, target_pages=(
             page_numbers_for_lines(src, [issue.line for issue in input_errors])
             if input_errors and not a.llm_syntax_repair else None))
+        src, _ = normalize_tex(src)
         syntax_repair_stats = vars(repair_stats)
         repaired_issues = validate_latex(src, require_sync_safe=False)
         repaired_errors = [i for i in repaired_issues if i.severity == "error"]
@@ -381,6 +382,7 @@ def cmd_optimise(a: argparse.Namespace) -> int:
             )
             targeted_retry_stats = vars(targeted_stats)
             src = candidate
+            src, _ = normalize_tex(src)
             repaired_issues = validate_latex(src, require_sync_safe=False)
             repaired_errors = [
                 i for i in repaired_issues if i.severity == "error"
