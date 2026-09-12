@@ -131,6 +131,11 @@ class SyntaxRepairTests(unittest.TestCase):
         source = r"$300\times g$ and \(a\pm b\)"
         self.assertEqual(normalize_text_mode_math_symbols(source), (source, 0))
 
+    def test_stray_backslash_before_cjk_is_literal(self) -> None:
+        from texopt.optimization.syntax_repair import normalize_stray_cjk_backslashes
+        self.assertEqual(normalize_stray_cjk_backslashes(r"value\孔"),
+                         (r"value\textbackslash{}孔", 1))
+
     def test_zero_argument_spacing_commands_are_delimited_before_cjk(self) -> None:
         source = (
             "正文\\quad至\\qquad结束\n"

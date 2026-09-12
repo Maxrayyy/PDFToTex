@@ -299,6 +299,13 @@ def normalize_text_mode_carets(source: str) -> tuple[str, int]:
     return "".join(out), changed
 
 
+def normalize_stray_cjk_backslashes(source: str) -> tuple[str, int]:
+    """Treat OCR backslashes before CJK text as literal text characters."""
+    pattern = re.compile(r"\\(?=[\u3400-\u9fff\uf900-\ufaff])")
+    normalized, changed = pattern.subn(r"\\textbackslash{}", source)
+    return normalized, changed
+
+
 class LLMSyntaxRepairer:
     """Repair consecutive Lexoid-page batches and cache accepted responses."""
 
