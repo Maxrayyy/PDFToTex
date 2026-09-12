@@ -401,7 +401,13 @@ def normalize_uniform_table_overflow(source):
         rows = [row for row in split_align_body(source[begin.body_start:end_start])
                 if any(cell.text.strip() for cell in row.cells)]
         spans = [sum(multicolumn_span(cell.text) for cell in row.cells) for row in rows]
-        if len(spans) < 2 or any(span != expected + 1 for span in spans):
+        overflow = sum(span == expected + 1 for span in spans)
+        # Wide instrument grids often omit one trailing column from the
+        # specification while keeping that column in the header/data rows.
+        # Require a wide table and a clear majority before repairing; complex
+        # narrow forms remain untouched for visual fallback.
+        if (expected < 8 or len(spans) < 2 or overflow < max(2, (len(spans) + 1) // 2)
+                or any(span > expected + 1 for span in spans)):
             continue
         spec_pos = head.rfind("{" + spec + "}")
         if spec_pos < 0:

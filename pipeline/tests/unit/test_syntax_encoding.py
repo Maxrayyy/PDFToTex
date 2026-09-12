@@ -11,6 +11,7 @@ from texopt.optimization.cli import _compile_latex, remove_explicit_sync_anchors
 from texopt.optimization.preamble import inject
 from texopt.optimization.syntax_check import validate_latex
 from texopt.optimization.syntax_repair import normalize_math_blank_lines
+from texopt.optimization.local_tex import normalize_uniform_table_overflow
 from texopt.core.textio import read_text_auto, write_utf8_atomic
 
 
@@ -36,6 +37,17 @@ class EncodingTests(unittest.TestCase):
 
 
 class SyntaxTests(unittest.TestCase):
+    def test_wide_uniform_table_overflow_adds_trailing_column(self) -> None:
+        source = "\\begin{tabular}{c|c|c|c|c|c|c|c}\n" + "a&b&c&d&e&f&g&h&i\\\\\n" * 2 + "\\end{tabular}"
+        repaired, count = normalize_uniform_table_overflow(source)
+        self.assertEqual(count, 1)
+        self.assertIn(r"{c|c|c|c|c|c|c|cl}", repaired)
+
+    def test_narrow_mixed_table_is_left_unchanged(self) -> None:
+        source = "\\begin{tabular}{c|c|c}\n" + "a&b&c&d\\\\\n" + "a&b\\\\\n\\end{tabular}"
+        repaired, count = normalize_uniform_table_overflow(source)
+        self.assertEqual((repaired, count), (source, 0))
+
     def test_strikeout_loads_missing_dependency_without_option_clash(self) -> None:
         for existing in ("", r"\usepackage{ulem}", r"\newcommand{\sout}[1]{#1}"):
             with self.subTest(existing=existing), tempfile.TemporaryDirectory() as directory:
