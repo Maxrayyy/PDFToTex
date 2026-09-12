@@ -11,7 +11,8 @@ from texopt.optimization.cli import _compile_latex, remove_explicit_sync_anchors
 from texopt.optimization.preamble import inject
 from texopt.optimization.syntax_check import validate_latex
 from texopt.optimization.syntax_repair import normalize_math_blank_lines
-from texopt.optimization.local_tex import normalize_uniform_table_overflow
+from texopt.optimization.local_tex import (normalize_uniform_table_overflow,
+                                           normalize_unclosed_makebox_rows)
 from texopt.core.textio import read_text_auto, write_utf8_atomic
 
 
@@ -47,6 +48,16 @@ class SyntaxTests(unittest.TestCase):
         source = "\\begin{tabular}{c|c|c}\n" + "a&b&c&d\\\\\n" + "a&b\\\\\n\\end{tabular}"
         repaired, count = normalize_uniform_table_overflow(source)
         self.assertEqual((repaired, count), (source, 0))
+
+    def test_unclosed_makebox_is_closed_only_before_row_break(self) -> None:
+        source = r"\underline{\makebox[4cm][c]{\fieldvalue{\handwritten{14:16}}}\\" + "\n"
+        repaired, count = normalize_unclosed_makebox_rows(source)
+        self.assertEqual(count, 1)
+        self.assertTrue(repaired.startswith(r"\underline{\makebox[4cm][c]{\fieldvalue{\handwritten{14:16}}}}"))
+
+    def test_balanced_makebox_is_unchanged(self) -> None:
+        source = r"\underline{\makebox[2cm][c]{\fieldvalue{\handwritten{200}}}}\\" + "\n"
+        self.assertEqual(normalize_unclosed_makebox_rows(source), (source, 0))
 
     def test_strikeout_loads_missing_dependency_without_option_clash(self) -> None:
         for existing in ("", r"\usepackage{ulem}", r"\newcommand{\sout}[1]{#1}"):

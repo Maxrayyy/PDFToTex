@@ -381,6 +381,39 @@ def normalize_numeric_text_backslashes(source):
     return normalized, int(normalized != source)
 
 
+def normalize_unclosed_makebox_rows(source):
+    """Close truncated underline/makebox wrappers on a single table row.
+
+    Vision output occasionally omits the final braces of a handwritten value
+    wrapped in ``\\underline{\\makebox{...}{\\fieldvalue{...}}}``.  Restrict
+    recovery to lines that contain that explicit wrapper and a row terminator;
+    unrelated braces and page boundaries are left untouched.
+    """
+    changed = 0
+    lines = source.splitlines(keepends=True)
+    for index, line in enumerate(lines):
+        if r"\underline{" not in line or r"\makebox" not in line:
+            continue
+        row_break = re.search(r"(?<!\\)\\\\(?=\s*(?:%.*)?$)", line.rstrip("\n"))
+        if not row_break:
+            continue
+        body = line[:row_break.start()]
+        depth = 0
+        escaped = False
+        for char in body:
+            if char == "{" and not escaped:
+                depth += 1
+            elif char == "}" and not escaped and depth:
+                depth -= 1
+            escaped = char == "\\" and not escaped
+            if char != "\\":
+                escaped = False
+        if depth:
+            lines[index] = line[:row_break.start()] + ("}" * depth) + line[row_break.start():]
+            changed += 1
+    return "".join(lines), changed
+
+
 def normalize_uniform_table_overflow(source):
     """Expand a table spec only when every populated row has one extra cell."""
     edits = []
@@ -451,6 +484,7 @@ def normalize_tex(source):
     for name, operation in (
         ("literal_model_newlines", normalize_literal_model_newlines),
         ("numeric_text_backslashes", normalize_numeric_text_backslashes),
+        ("unclosed_makebox_rows", normalize_unclosed_makebox_rows),
         ("control_word_boundaries", normalize_control_word_boundaries),
         ("text_math_symbols", normalize_text_mode_math_symbols),
         ("text_mode_carets", normalize_text_mode_carets),
