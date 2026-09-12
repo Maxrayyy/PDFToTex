@@ -459,7 +459,6 @@ def normalize_tex(source):
         ("table_row_endings", normalize_table_row_endings),
         ("table_heading_breaks", normalize_table_heading_breaks),
         ("uniform_table_overflow", normalize_uniform_table_overflow),
-        ("page_boundary_closures", normalize_page_boundary_closures),
         ("missing_support", inject_support),
     ):
         source, count = operation(source)
