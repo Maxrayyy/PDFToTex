@@ -43,7 +43,7 @@ CONTROL_WORD_BEFORE_CJK = re.compile(
     r"(?=[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff])"
 )
 TEXT_MODE_MATH_SYMBOL = re.compile(
-    r"(?<!\\ensuremath\{)\\(?P<name>diagup|diagdown|times|pm|ge|le|neq)\b"
+    r"(?<!\\ensuremath\{)\\(?P<name>diagup|diagdown|times|pm|ge|le|neq)(?![A-Za-z@])"
 )
 
 SYSTEM_PROMPT = """\

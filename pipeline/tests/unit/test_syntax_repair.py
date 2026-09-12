@@ -123,9 +123,9 @@ class SyntaxRepairTests(unittest.TestCase):
         self.assertEqual(normalize_text_mode_math_symbols(repaired), (repaired, 0))
 
     def test_text_mode_times_is_safe(self) -> None:
-        repaired, count = normalize_text_mode_math_symbols(r"300\times g 条件")
+        repaired, count = normalize_text_mode_math_symbols(r"1\times10 条件")
         self.assertEqual(count, 1)
-        self.assertEqual(repaired, r"300\ensuremath{\times} g 条件")
+        self.assertEqual(repaired, r"1\ensuremath{\times}10 条件")
 
     def test_math_mode_symbols_are_unchanged(self) -> None:
         source = r"$300\times g$ and \(a\pm b\)"
