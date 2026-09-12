@@ -414,6 +414,33 @@ def normalize_unclosed_makebox_rows(source):
     return "".join(lines), changed
 
 
+def normalize_unclosed_field_rows(source):
+    """Close an incomplete field wrapper before a same-line table break."""
+    lines = source.splitlines(keepends=True)
+    changed = 0
+    for index, line in enumerate(lines):
+        if r"\fieldvalue{" not in line:
+            continue
+        row_break = re.search(r"(?<!\\)\\\\(?=\s*(?:%.*)?$)", line.rstrip("\n"))
+        if not row_break:
+            continue
+        body = line[:row_break.start()]
+        depth = 0
+        escaped = False
+        for char in body:
+            if char == "{" and not escaped:
+                depth += 1
+            elif char == "}" and not escaped and depth:
+                depth -= 1
+            escaped = char == "\\" and not escaped
+            if char != "\\":
+                escaped = False
+        if depth:
+            lines[index] = line[:row_break.start()] + ("}" * depth) + line[row_break.start():]
+            changed += 1
+    return "".join(lines), changed
+
+
 def normalize_uniform_table_overflow(source):
     """Expand a table spec only when every populated row has one extra cell."""
     edits = []
@@ -485,6 +512,7 @@ def normalize_tex(source):
         ("literal_model_newlines", normalize_literal_model_newlines),
         ("numeric_text_backslashes", normalize_numeric_text_backslashes),
         ("unclosed_makebox_rows", normalize_unclosed_makebox_rows),
+        ("unclosed_field_rows", normalize_unclosed_field_rows),
         ("control_word_boundaries", normalize_control_word_boundaries),
         ("text_math_symbols", normalize_text_mode_math_symbols),
         ("text_mode_carets", normalize_text_mode_carets),
