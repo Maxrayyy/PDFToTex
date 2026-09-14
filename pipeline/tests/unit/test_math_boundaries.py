@@ -37,6 +37,21 @@ def test_recognition_page_comments_also_bound_math_state():
     assert [issue.line for issue in issues] == [1, 3]
 
 
+def test_page_wrapper_macros_also_bound_math_state():
+    source = (
+        r"\LexoidPageStart{1}{595bp}{842bp}{0}" + "\n"
+        "残留 $x\n"
+        r"\LexoidPageEnd{1}" + "\n"
+        r"\LexoidPageStart{2}{595bp}{842bp}{0}" + "\n"
+        r"比例 $\times100\%$ 正文" + "\n"
+        r"\LexoidPageEnd{2}" + "\n"
+    )
+    issues = [issue for issue in validate_latex(source) if issue.code == "UNCLOSED_MATH"]
+    # The second page's paired formula must remain independent of page 1;
+    # only the genuinely malformed source page is reported.
+    assert [issue.line for issue in issues] == [2]
+
+
 def test_orphan_math_cannot_erase_paragraphs_across_source_pages():
     source = "$x\n\n% LEXOID_PAGE_COMPLETED: 1/2\n\ntext $y$\n"
     assert normalize_math_blank_lines(source) == (source, 0)

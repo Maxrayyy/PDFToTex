@@ -81,6 +81,20 @@ class SyntaxRepairTests(unittest.TestCase):
         self.assertNotIn("$", repaired)
         self.assertIn("\n\nConfirmation\n\n", repaired)
 
+    def test_unclosed_math_is_closed_before_next_page_formula(self) -> None:
+        source = (
+            r"\LexoidPageStart{1}{595bp}{842bp}{0}" + "\n"
+            "残留 $x\n"
+            r"\LexoidPageEnd{1}" + "\n"
+            r"\LexoidPageStart{2}{595bp}{842bp}{0}" + "\n"
+            r"比例 $\times100\%$ 正文" + "\n"
+            r"\LexoidPageEnd{2}" + "\n"
+        )
+        repaired, _ = normalize_text_mode_math_symbols(source)
+        self.assertIn(r"残留 \ensuremath{x}", repaired)
+        self.assertIn(r"比例 \ensuremath{\times100\%} 正文", repaired)
+        self.assertNotIn("残留 $x", repaired)
+
     @unittest.skipUnless(shutil.which("xelatex"), "XeLaTeX is required")
     def test_may_formula_result_compiles_before_following_paragraph(self) -> None:
         source = (

@@ -289,6 +289,26 @@ def normalize_text_mode_math_symbols(source: str) -> tuple[str, int]:
     changed = 0
     out: list[str] = []
 
+    # A malformed page may leave one inline dollar open at its page wrapper.
+    # Close that fragment locally before scanning the next page; otherwise
+    # the next page's valid ``$...$`` pair is consumed as the old math state.
+    boundary_positions = [
+        position for position, value in math_boundary_tokens(source)
+        if value in {r"\LexoidPageStart", r"\LexoidPageEnd"}
+    ]
+    page_closures: list[tuple[int, str]] = []
+    for position, delimiter in unclosed_math_delimiters(source):
+        if delimiter != "$":
+            continue
+        boundary = next((item for item in boundary_positions if item > position), None)
+        if boundary is not None:
+            page_closures.append((position, r"\ensuremath{"))
+            close_at = boundary - 1 if boundary and source[boundary - 1] == "\n" else boundary
+            page_closures.append((close_at, "}"))
+    for position, replacement in sorted(page_closures, reverse=True):
+        source = source[:position] + replacement + source[position + (1 if replacement.startswith(r"\ensuremath") else 0):]
+        changed += 1
+
     def replace_handwritten_math(match: re.Match[str]) -> str:
         nonlocal changed
         changed += 1
