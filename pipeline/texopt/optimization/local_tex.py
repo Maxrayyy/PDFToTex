@@ -434,6 +434,35 @@ def normalize_handwritten_text_backslashes(source):
     return source, len(edits)
 
 
+def normalize_text_hashes(source: str) -> tuple[str, int]:
+    """Escape literal hash characters in document text, preserving definitions."""
+    lines = []
+    changed = 0
+    in_support = False
+    for line in source.splitlines(keepends=True):
+        if re.match(r"%\s*>>>\s*lexoid\b", line):
+            in_support = True
+        if in_support:
+            lines.append(line)
+            if re.match(r"%\s*<<<\s*lexoid", line):
+                in_support = False
+            continue
+        visible = line.split("%", 1)[0]
+        if re.search(r"\\(?:newcommand|renewcommand|providecommand|def|edef|gdef)\b", visible):
+            lines.append(line)
+            continue
+        edits = []
+        for index, char in enumerate(visible):
+            if char != "#" or (index and visible[index - 1] == "\\"):
+                continue
+            edits.append(index)
+        for index in reversed(edits):
+            line = line[:index] + r"\#" + line[index + 1:]
+        changed += len(edits)
+        lines.append(line)
+    return "".join(lines), changed
+
+
 def normalize_unclosed_makebox_rows(source):
     """Close truncated underline/makebox wrappers on a single table row.
 
@@ -628,6 +657,7 @@ def normalize_tex(source):
     for name, operation in (
         ("literal_model_newlines", normalize_literal_model_newlines),
         ("numeric_text_backslashes", normalize_numeric_text_backslashes),
+        ("text_hashes", normalize_text_hashes),
         ("handwritten_text_backslashes", normalize_handwritten_text_backslashes),
         ("unclosed_makebox_rows", normalize_unclosed_makebox_rows),
         ("unclosed_field_rows", normalize_unclosed_field_rows),

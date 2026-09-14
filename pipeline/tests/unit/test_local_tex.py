@@ -375,3 +375,19 @@ def test_inline_value_id_is_moved_to_comment_line():
     repaired, count = normalize_inline_field_metadata_comments(source)
     assert count == 1
     assert repaired == "\\fieldvalue{\\handwritten{1}}\\ensuremath{\\div}\n% #VALUE_ID: LEX-P0080-V0017\n"
+
+
+def test_escapes_literal_hashes_in_table_text_without_touching_macro_parameters():
+    from texopt.optimization.local_tex import normalize_tex
+
+    source = (
+        r"\begin{tabular}{ll}" + "\n"
+        r"Population & #### \\" + "\n"
+        r"\end{tabular}" + "\n"
+        r"\newcommand{\sample}[1]{#1}" + "\n"
+    )
+    fixed, changes = normalize_tex(source)
+    assert r"Population & \#\#\#\# \\" in fixed
+    assert r"\newcommand{\sample}[1]{#1}" in fixed
+    assert changes["text_hashes"] == 4
+    assert normalize_tex(fixed)[0] == fixed
