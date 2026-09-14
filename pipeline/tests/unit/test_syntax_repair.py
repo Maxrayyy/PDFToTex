@@ -81,19 +81,33 @@ class SyntaxRepairTests(unittest.TestCase):
         self.assertNotIn("$", repaired)
         self.assertIn("\n\nConfirmation\n\n", repaired)
 
-    def test_unclosed_math_is_closed_before_next_page_formula(self) -> None:
+    def test_trailing_field_dollar_is_removed_before_next_page_formula(self) -> None:
         source = (
             r"\LexoidPageStart{1}{595bp}{842bp}{0}" + "\n"
-            "残留 $x\n"
+            r"\fieldvalue{\handwritten{100\%}}$" + "\n"
             r"\LexoidPageEnd{1}" + "\n"
             r"\LexoidPageStart{2}{595bp}{842bp}{0}" + "\n"
             r"比例 $\times100\%$ 正文" + "\n"
             r"\LexoidPageEnd{2}" + "\n"
         )
         repaired, _ = normalize_text_mode_math_symbols(source)
-        self.assertIn(r"残留 \ensuremath{x}", repaired)
+        self.assertIn(r"\fieldvalue{\handwritten{100\%}}" + "\n", repaired)
         self.assertIn(r"比例 \ensuremath{\times100\%} 正文", repaired)
-        self.assertNotIn("残留 $x", repaired)
+        self.assertNotIn(r"\fieldvalue{\handwritten{100\%}}$", repaired)
+
+    def test_ambiguous_dollar_does_not_wrap_remaining_page_structure(self) -> None:
+        source = (
+            r"\LexoidPageStart{1}{595bp}{842bp}{0}" + "\n"
+            "普通文本 $x\n"
+            r"\begin{tabular}{ll}" + "\n"
+            r"A & B \\" + "\n"
+            r"\end{tabular}" + "\n"
+            r"\LexoidPageEnd{1}" + "\n"
+        )
+        repaired, _ = normalize_text_mode_math_symbols(source)
+        self.assertIn("普通文本 $x\n", repaired)
+        self.assertNotIn(r"\ensuremath{x", repaired)
+        self.assertIn(r"\begin{tabular}{ll}", repaired)
 
     @unittest.skipUnless(shutil.which("xelatex"), "XeLaTeX is required")
     def test_may_formula_result_compiles_before_following_paragraph(self) -> None:
