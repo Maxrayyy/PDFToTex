@@ -52,6 +52,36 @@ def test_model_text_separators_are_normalized_without_touching_commands():
     assert changes["literal_model_newlines"] == 1
 
 
+def test_missing_graphic_is_replaced_with_compile_safe_placeholder():
+    from texopt.optimization.local_tex import normalize_tex
+
+    source = r"\documentclass{article}\usepackage{graphicx}\begin{document}" \
+        r"\includegraphics[width=.3\linewidth]{missing-logo}\end{document}"
+    fixed, changes = normalize_tex(source)
+    assert changes.get("missing_graphics") == 1
+    assert r"\IfFileExists{missing-logo}" in fixed
+    assert r"\includegraphics[width=.3\linewidth]{missing-logo}" in fixed
+
+
+def test_plain_text_closing_brace_is_preserved():
+    """A CJK line ending in a group closer may close a parbox or field."""
+    from texopt.optimization.local_tex import normalize_tex
+
+    source = r"\parbox[t][2cm][c]{\linewidth}{中文说明}" + "\n"
+    fixed, changes = normalize_tex(source)
+    assert fixed == source
+    assert "plain_text_stray_closers" not in changes
+
+
+def test_handwritten_raw_superscript_stays_text_safe():
+    from texopt.optimization.local_tex import normalize_tex
+
+    source = r"\fieldvalue{\handwritten{500x10^{9}}}"
+    fixed, changes = normalize_tex(source)
+    assert r"\handwritten{500x10\textsuperscript{9}}" in fixed
+    assert changes.get("handwritten_raw_superscripts") == 1
+
+
 def test_numeric_backslashes_become_visible_text_not_row_breaks():
     from texopt.optimization.local_tex import normalize_tex
 
@@ -74,6 +104,18 @@ def test_handwritten_backslashes_are_literal_text_inside_tables(tmp_path):
     assert r"\handwritten{3\textbackslash{}\#培养间 5260C}" in fixed
     assert not compile_page(fixed, tmp_path / "handwritten")
     assert normalize_tex(fixed)[0] == fixed
+
+
+def test_upright_greek_macro_injects_available_package(tmp_path):
+    from texopt.optimization.local_tex import normalize_tex
+
+    source = (r"\documentclass{article}\begin{document}" + "\n"
+        + r"活细胞直径 ($\upmu$m)" + "\n"
+        + r"\end{document}")
+    fixed, changes = normalize_tex(source)
+    assert changes["missing_support"] == 1
+    assert r"\RequirePackage{upgreek}" in fixed
+    assert not compile_page(fixed, tmp_path / "upgreek")
 
 
 def test_ulem_script_repair_preserves_fields_and_ignores_literals_and_boxes():
@@ -317,3 +359,19 @@ def test_dependencies_discovered_on_later_page_are_added_to_final_preamble(tmp_p
                            renderer=lambda *args: None)
     assert calls == [] and result["unresolved"] == []
     assert not compile_page(raw.read_text(), tmp_path / "final")
+def test_field_metadata_comments_are_restored_after_cell_assembly():
+    from texopt.optimization.local_tex import normalize_field_metadata_comments
+
+    source = "   \\% #VALUE_ID: LEX-P0014-V0001\n   \\% #FIELD_VALUE: 结果\n"
+    repaired, count = normalize_field_metadata_comments(source)
+    assert count == 2
+    assert repaired == "   % #VALUE_ID: LEX-P0014-V0001\n   % #FIELD_VALUE: 结果\n"
+
+
+def test_inline_value_id_is_moved_to_comment_line():
+    from texopt.optimization.local_tex import normalize_inline_field_metadata_comments
+
+    source = "\\fieldvalue{\\handwritten{1}}\\ensuremath{\\div}% #VALUE_ID: LEX-P0080-V0017\n"
+    repaired, count = normalize_inline_field_metadata_comments(source)
+    assert count == 1
+    assert repaired == "\\fieldvalue{\\handwritten{1}}\\ensuremath{\\div}\n% #VALUE_ID: LEX-P0080-V0017\n"

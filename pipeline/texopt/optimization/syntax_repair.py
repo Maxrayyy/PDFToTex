@@ -17,7 +17,7 @@ from typing import Callable, Optional
 from .llm import ANTHROPIC_API_URL, _is_openai_model, openai_api_url
 from ..core.model_config import resolve_model
 from ..core.textio import write_utf8_atomic
-from .syntax_check import _mask_verbatim
+from .syntax_check import _mask_verbatim, math_boundary_tokens, unclosed_math_delimiters
 from .tex_tables import CS_RE, _read_balanced, _skip_ws, iter_structural, mask_comments
 
 
@@ -43,7 +43,7 @@ CONTROL_WORD_BEFORE_CJK = re.compile(
     r"(?=[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff])"
 )
 TEXT_MODE_MATH_SYMBOL = re.compile(
-    r"(?<!\\ensuremath\{)\\(?P<name>diagup|diagdown|times|pm|ge|le|neq|circ)(?![A-Za-z@])"
+    r"(?<!\\ensuremath\{)\\(?P<name>diagup|diagdown|times|div|pm|ge|le|neq|circ)(?![A-Za-z@])"
 )
 TEXT_MODE_MATH_COMMAND = re.compile(
     r"(?<!\\)\\(?P<name>mathrm|mathbf|mathit|mathsf|mathtt|mathcal|mathbb)"
@@ -51,6 +51,58 @@ TEXT_MODE_MATH_COMMAND = re.compile(
 )
 TEXT_MODE_ESCAPED_RELATION = re.compile(r"\\\$([<>])\$")
 TEXT_MODE_SPLIT_MATH_UNIT = re.compile(r"\$(\\[A-Za-z]+)\$([A-Za-z])\$")
+TEXT_MODE_INLINE_OPERATOR_FORMULA = re.compile(
+    r"\$(?P<body>(?:\\ensuremath\{\\(?:times|div|pm)\}|\\(?:times|div|pm))"
+    r"\s*[0-9]+(?:\\%|%)?(?:=)?)\$"
+)
+TEXT_MODE_SCIENTIFIC_EXPR = re.compile(
+    r"(?<!\\ensuremath\{)(?P<op>\\(?:times|div|pm))\s+"
+    r"(?P<num>[0-9]+(?:\.[0-9]+)?)"
+    r"(?P<sup>\^\{[^{}\n]*\}|\^\w+)?"
+    r"(?P<sub>_\{[^{}\n]*\}|_\w+)?"
+)
+# OCR frequently emits a field macro followed immediately by a scientific
+# suffix (``\\hwfield{...}\\times10^7``).  The suffix itself must enter math
+# mode even though the field macro remains in text mode.
+TEXT_MODE_COMPACT_SCIENTIFIC_SUFFIX = re.compile(
+    r"(?P<op>\\(?:times|div|pm))\s*"
+    r"(?P<num>[0-9]+(?:\.[0-9]+)?)"
+    r"(?P<sup>\^\{[^{}\n]*\}|\^\w+)"
+)
+TEXT_MODE_SCIENTIFIC_PRODUCT = re.compile(
+    r"(?P<left>[0-9]+(?:\.[0-9]+)?)"
+    r"(?P<op>\\(?:times|div|pm))\s*"
+    r"(?P<right>[0-9]+(?:\.[0-9]+)?)"
+    r"(?P<sup>\^\{[^{}\n]*\}|\^\w+)"
+)
+SPLIT_ENSUREMATH_EXPONENT = re.compile(
+    r"\$\\ensuremath\{\\times\}\$(?P<num>[0-9]+)"
+    r"(?P<sup>\^\{[^{}\n]*\}|\^\w+)"
+)
+SPLIT_SCIENTIFIC_PRODUCT = re.compile(
+    r"(?P<left>[0-9]+(?:\.[0-9]+)?)\$\\ensuremath\{\\times\}\$"
+    r"(?P<right>[0-9]+(?:\.[0-9]+)?)"
+    r"(?P<sup>\^\{[^{}\n]*\}|\^\w+)?"
+)
+HANDWRITTEN_TEXT_CARET = re.compile(
+    r"(?P<prefix>\\handwritten\{[^{}\n]*?)\^(?=[A-Za-z0-9{])"
+)
+MATH_ASCII_CARET = re.compile(
+    r"\\textasciicircum\{\}(?:\{(?P<braced>[^{}\n]+)\}|(?P<bare>[A-Za-z0-9]))"
+)
+INLINE_MATH_CARET = re.compile(
+    r"(?P<prefix>\$[^$\n]*?)(?:\^(?P<raw>[A-Za-z0-9])|"
+    r"\\textasciicircum\{\}(?:\{(?P<braced>[^{}\n]+)\}|(?P<text>[A-Za-z0-9])))"
+    r"(?P<suffix>[^$\n]*\$)"
+)
+HANDWRITTEN_INLINE_MATH_CARET = re.compile(
+    r"(?P<prefix>\\handwritten\{\$[^$\n]*?)(?:\^(?P<raw>[A-Za-z0-9])|"
+    r"\\textasciicircum\{\}(?:\{(?P<braced>[^{}\n]+)\}|(?P<text>[A-Za-z0-9])))"
+    r"(?P<suffix>[^$\n]*\$)"
+)
+HANDWRITTEN_MATH_DELIMITERS = re.compile(
+    r"(?P<prefix>\\handwritten\{[^\n$]*)\$(?P<body>[^$\n]*)\$"
+)
 
 SYSTEM_PROMPT = """\
 You are a conservative XeLaTeX syntax repair engine. The input is a numbered LaTeX
@@ -207,18 +259,17 @@ def normalize_control_word_boundaries(source: str) -> tuple[str, int]:
 
 def normalize_math_blank_lines(source: str) -> tuple[str, int]:
     """Comment out paragraph breaks inside paired math delimiters, retaining lines."""
-    masked = _mask_verbatim(mask_comments(source))
     closing = {"$": "$", "$$": "$$", r"\(": r"\)", r"\[": r"\]"}
     expected = None
     start = 0
     spans = []
-    # Consume all control sequences so escaped dollars cannot open math mode.
-    for token in re.finditer(r"\\[a-zA-Z@]+|\\[\s\S]|\$\$?", masked):
-        value = token.group()
-        if expected is None and value in closing:
-            start, expected = token.end(), closing[value]
+    for position, value in math_boundary_tokens(source):
+        if value in {r"\LexoidPageStart", r"\LexoidPageEnd"}:
+            expected = None
+        elif expected is None and value in closing:
+            start, expected = position + len(value), closing[value]
         elif expected is not None and value == expected:
-            spans.append((start, token.start()))
+            spans.append((start, position))
             expected = None
     edits = []
     span_index = 0
@@ -237,6 +288,28 @@ def normalize_text_mode_math_symbols(source: str) -> tuple[str, int]:
     """Make standalone diagonal cancellation marks valid in text-mode fields."""
     changed = 0
     out: list[str] = []
+
+    def replace_handwritten_math(match: re.Match[str]) -> str:
+        nonlocal changed
+        changed += 1
+        return match.group("prefix") + r"\ensuremath{" + match.group("body") + "}"
+
+    source = HANDWRITTEN_MATH_DELIMITERS.sub(replace_handwritten_math, source)
+    def replace_inline_formula(match: re.Match[str]) -> str:
+        body = match.group("body")
+        for name in ("times", "div", "pm"):
+            body = body.replace(rf"\ensuremath{{\{name}}}", rf"\{name}")
+        return rf"\ensuremath{{{body}}}"
+
+    dollar_tokens = {position for position, value in math_boundary_tokens(source) if value == "$"}
+    formulas = [match for match in TEXT_MODE_INLINE_OPERATOR_FORMULA.finditer(source)
+                if match.start() in dollar_tokens and match.end() - 1 in dollar_tokens]
+    for match in reversed(formulas):
+        source = source[:match.start()] + replace_inline_formula(match) + source[match.end():]
+    changed += len(formulas)
+    orphan_dollars = {position for position, delimiter in unclosed_math_delimiters(source)
+                      if delimiter == "$"}
+    line_offset = 0
     math_mode = False
     for line in source.splitlines(keepends=True):
         comment_at = len(line)
@@ -254,12 +327,18 @@ def normalize_text_mode_math_symbols(source: str) -> tuple[str, int]:
 
         def replace(match: re.Match[str]) -> str:
             nonlocal changed
+            prefix = visible[:match.start()]
+            if (prefix.rfind(r"\ensuremath{") > prefix.rfind("}")
+                    or re.search(r"\\ensuremath\{[^{}]*$", prefix)):
+                return match.group(0)
             changed += 1
             return rf"\ensuremath{{\{match.group('name')}}}"
 
         def replace_command(match: re.Match[str]) -> str:
             nonlocal changed
-            if visible[:match.start()].endswith(r"\ensuremath{"):
+            prefix = visible[:match.start()]
+            if (prefix.endswith(r"\ensuremath{")
+                    or re.search(r"\\ensuremath\{[^{}]*$", prefix)):
                 return match.group(0)
             changed += 1
             return rf"\ensuremath{{\{match.group('name')}{{{match.group('body')}}}}}"
@@ -275,7 +354,111 @@ def normalize_text_mode_math_symbols(source: str) -> tuple[str, int]:
             return rf"${match.group(1)} {match.group(2)}$"
 
         visible = line[:comment_at]
+        # A model may append a single dollar after a text-mode operator
+        # (for example ``\\div$``).  It is not a valid math delimiter when
+        # there is no matching dollar on the same line; the operator itself
+        # is safely represented by ``\\ensuremath`` below.
+        unescaped_dollars = [
+            index for index, char in enumerate(visible)
+            if char == "$" and (index == 0 or visible[index - 1] != "\\")
+        ]
+        if (len(unescaped_dollars) % 2
+                and line_offset + unescaped_dollars[-1] in orphan_dollars):
+            orphan = unescaped_dollars[-1]
+            before = visible[:orphan]
+            suffix = visible[orphan + 1:]
+            # Only remove a trailing field delimiter when the document scan
+            # proves it has no mate. A valid multiline formula must keep it.
+            field = re.match(r"\s*\\(fieldvalue|hwfield)\s*", before)
+            field_end = field.end() if field else -1
+            if field:
+                for _ in range(2 if field.group(1) == "hwfield" else 1):
+                    field_end = _skip_ws(before, field_end)
+                    group = _read_balanced(before, field_end, "{", "}")
+                    if not group:
+                        field_end = -1
+                        break
+                    field_end = group[1]
+            if field_end >= 0 and not before[field_end:].strip() and not suffix.strip():
+                visible = before + suffix
+                changed += 1
+            elif (not suffix.strip()
+                    and re.search(r"\\(?:times|div|pm)\s*$", before)):
+                visible = before + suffix
+                changed += 1
+            else:
+                # Close a numeric/math fragment that starts with a dollar and
+                # runs to the end of the physical line.  Keeping the fragment
+                # in ensuremath avoids leaking math mode into the next table
+                # row, while preserving every token in the original value.
+                fragment = visible[orphan + 1:]
+                content = fragment.rstrip("\r\n")
+                ending = fragment[len(content):]
+                if re.search(r"[0-9]|\\(?:times|div|pm|mu|mathrm)", content):
+                    visible = visible[:orphan] + r"\ensuremath{" + content + "}" + ending
+                    changed += 1
         visible = TEXT_MODE_SPLIT_MATH_UNIT.sub(replace_split_unit, visible)
+        def replace_scientific_product(match: re.Match[str]) -> str:
+            nonlocal changed
+            changed += 1
+            exponent = match.group('sup') or ''
+            return rf"\ensuremath{{{match.group('left')}\times {match.group('right')}{exponent}}}"
+
+        visible = SPLIT_SCIENTIFIC_PRODUCT.sub(replace_scientific_product, visible)
+        def replace_text_scientific_product(match: re.Match[str]) -> str:
+            nonlocal changed
+            prefix = visible[:match.start()]
+            unescaped_dollars = sum(
+                1 for index, char in enumerate(prefix)
+                if char == "$" and (index == 0 or prefix[index - 1] != "\\")
+            )
+            if (unescaped_dollars % 2
+                    or r"\ensuremath{" in prefix
+                    or re.search(r"\\ensuremath\{[^{}]*$", prefix)):
+                return match.group(0)
+            changed += 1
+            return rf"\ensuremath{{{match.group(0)}}}"
+
+        visible = TEXT_MODE_SCIENTIFIC_PRODUCT.sub(
+            replace_text_scientific_product, visible
+        )
+        def replace_split_exponent(match: re.Match[str]) -> str:
+            nonlocal changed
+            changed += 1
+            return rf"$\ensuremath{{\times {match.group('num')}{match.group('sup')}}}$"
+
+        visible = SPLIT_ENSUREMATH_EXPONENT.sub(replace_split_exponent, visible)
+        def replace_scientific(match: re.Match[str]) -> str:
+            nonlocal changed
+            prefix = visible[:match.start()]
+            if (prefix.rfind(r"\ensuremath{") > prefix.rfind("}")
+                    or re.search(r"\\ensuremath\{[^{}]*$", prefix)):
+                return match.group(0)
+            changed += 1
+            return rf"\ensuremath{{{match.group(0)}}}"
+
+        visible = TEXT_MODE_SCIENTIFIC_EXPR.sub(replace_scientific, visible)
+        def replace_compact_scientific_suffix(match: re.Match[str]) -> str:
+            nonlocal changed
+            prefix = visible[:match.start()]
+            explicit_math = math_mode
+            for token in re.finditer(r"\\[a-zA-Z@]+|\\[\s\S]|\$\$?", prefix):
+                if token.group() in {"$", "$$"}:
+                    explicit_math = not explicit_math
+                elif token.group() in {r"\(", r"\["}:
+                    explicit_math = True
+                elif token.group() in {r"\)", r"\]"}:
+                    explicit_math = False
+            if (explicit_math
+                    or prefix.rfind(r"\ensuremath{") > prefix.rfind("}")
+                    or re.search(r"\\ensuremath\{[^{}]*$", prefix)):
+                return match.group(0)
+            changed += 1
+            return rf"\ensuremath{{{match.group('op')} {match.group('num')}{match.group('sup')}}}"
+
+        visible = TEXT_MODE_COMPACT_SCIENTIFIC_SUFFIX.sub(
+            replace_compact_scientific_suffix, visible
+        )
         visible = TEXT_MODE_MATH_COMMAND.sub(replace_command, visible)
         visible = TEXT_MODE_ESCAPED_RELATION.sub(replace_relation, visible)
         pieces = []
@@ -295,13 +478,74 @@ def normalize_text_mode_math_symbols(source: str) -> tuple[str, int]:
             cursor = token.end()
         tail = visible[cursor:]
         pieces.append(TEXT_MODE_MATH_SYMBOL.sub(replace, tail) if not math_mode else tail)
-        out.append("".join(pieces) + line[comment_at:])
+        rendered = "".join(pieces)
+        # A malformed dollar on an earlier physical line can leave the
+        # stateful scanner in math mode.  Field rows are independently scoped
+        # by their macros; when such a row has no explicit dollar delimiter,
+        # keep standalone operators compile-safe instead of inheriting stale
+        # state from another row.
+        if r"\hwfield" in rendered and "$" not in rendered:
+            rendered, local_count = re.subn(
+                r"(?<!\\ensuremath\{)\\(?P<name>times|div|pm)(?![A-Za-z@])",
+                lambda match: rf"\ensuremath{{\{match.group('name')}}}",
+                rendered,
+            )
+            changed += local_count
+        out.append(rendered + line[comment_at:])
+        line_offset += len(line)
     return "".join(out), changed
 
 
 def normalize_text_mode_carets(source: str) -> tuple[str, int]:
     """Escape literal text-mode carets while preserving math expressions."""
     changed = 0
+
+    def replace_handwritten_caret(match: re.Match[str]) -> str:
+        nonlocal changed
+        prefix = match.group("prefix")
+        dollars = sum(1 for i, char in enumerate(prefix)
+                      if char == "$" and (i == 0 or prefix[i - 1] != "\\"))
+        if dollars % 2:
+            return match.group(0)
+        changed += 1
+        return prefix + r"\textasciicircum{}"
+
+    source = HANDWRITTEN_TEXT_CARET.sub(replace_handwritten_caret, source)
+
+    def replace_inline_math_caret(match: re.Match[str]) -> str:
+        nonlocal changed
+        changed += 1
+        exponent = (match.group("raw") or match.group("braced")
+                    or match.group("text"))
+        return match.group("prefix") + "^{" + exponent + "}" + match.group("suffix")
+
+    source = HANDWRITTEN_INLINE_MATH_CARET.sub(replace_inline_math_caret, source)
+    source = INLINE_MATH_CARET.sub(replace_inline_math_caret, source)
+
+    # ``\\ensuremath`` is commonly nested inside ``\\handwritten``.  The
+    # delimiter-aware scanner below only sees dollar/paren math, so normalize
+    # the ASCII-caret spelling directly whenever an ensuremath fragment is on
+    # the line.  This preserves ordinary text-mode carets on other lines.
+    def replace_ensuremath_ascii(line: str) -> str:
+        nonlocal changed
+        if r"\ensuremath{" not in line:
+            return line
+        repaired, count = re.subn(
+            r"\\textasciicircum\{\}(?:\{(?P<braced>[^{}\n]+)\}|(?P<bare>[A-Za-z0-9]))",
+            lambda match: "^{" + (match.group("braced") or match.group("bare")) + "}",
+            line,
+        )
+        changed += count
+        return repaired
+
+    source = "".join(replace_ensuremath_ascii(line)
+                     for line in source.splitlines(keepends=True))
+
+    def replace_math_ascii_caret(match: re.Match[str]) -> str:
+        nonlocal changed
+        changed += 1
+        return "^{" + (match.group("braced") or match.group("bare")) + "}"
+
     out = []
     math_mode = False
     for line in source.splitlines(keepends=True):
@@ -312,6 +556,8 @@ def normalize_text_mode_carets(source: str) -> tuple[str, int]:
             if not math_mode:
                 chunk, count = re.subn(r"(?<!\\)\^(?=[A-Za-z0-9{])", r"\\textasciicircum{}", chunk)
                 changed += count
+            else:
+                chunk = MATH_ASCII_CARET.sub(replace_math_ascii_caret, chunk)
             pieces.append(chunk + token.group())
             if token.group() in {"$", "$$"}: math_mode = not math_mode
             elif token.group() in {r"\(", r"\["}: math_mode = True
@@ -321,15 +567,64 @@ def normalize_text_mode_carets(source: str) -> tuple[str, int]:
         if not math_mode:
             chunk, count = re.subn(r"(?<!\\)\^(?=[A-Za-z0-9{])", r"\\textasciicircum{}", chunk)
             changed += count
+        else:
+            chunk = MATH_ASCII_CARET.sub(replace_math_ascii_caret, chunk)
         out.append("".join(pieces) + chunk + (sep + comment if sep else ""))
-    return "".join(out), changed
+    repaired_source = "".join(out)
+    # The scanner above treats only explicit dollar/paren delimiters as math;
+    # run the ensuremath-local conversion once more so its newly formed `^`
+    # is not escaped back into `\\textasciicircum`.
+    repaired_source = "".join(replace_ensuremath_ascii(line)
+                               for line in repaired_source.splitlines(keepends=True))
+    return repaired_source, changed
 
 
 def normalize_stray_cjk_backslashes(source: str) -> tuple[str, int]:
     """Treat OCR backslashes before CJK text as literal text characters."""
-    pattern = re.compile(r"\\(?=[\u3400-\u9fff\uf900-\ufaff])")
+    # A doubled slash before CJK is one literal slash in model text. Consume
+    # the pair together so it cannot become ``\\tabularnewline`` first.
+    pattern = re.compile(r"\\\\(?=[\u3400-\u9fff\uf900-\ufaff])|"
+                         r"\\(?=[\u3400-\u9fff\uf900-\ufaff])")
     normalized, changed = pattern.subn(r"\\textbackslash{}", source)
+    # Preserve a command boundary when an earlier pass already converted a
+    # doubled slash after a row break into ``\\tabularnewline\\textbackslash``.
+    normalized, boundary_changes = re.subn(
+        r"\\tabularnewline(?=\\textbackslash\{\})",
+        r"\\tabularnewline{}", normalized)
+    normalized, glued_changes = re.subn(
+        r"\\tabularnewlinetextbackslash\{\}",
+        r"\\tabularnewline{}\\textbackslash{}", normalized)
+    changed += boundary_changes + glued_changes
     return normalized, changed
+
+def normalize_unmatched_closing_braces(source: str) -> tuple[str, int]:
+    """Drop literal closing braces that have no open group in the document."""
+    masked = _mask_verbatim(mask_comments(source))
+    removals: list[int] = []
+    depth = 0
+    for index, char in enumerate(masked):
+        if char == "{" and (index == 0 or masked[index - 1] != "\\"):
+            depth += 1
+        elif char == "}" and (index == 0 or masked[index - 1] != "\\"):
+            if depth:
+                depth -= 1
+            else:
+                removals.append(index)
+    for index in reversed(removals):
+        source = source[:index] + source[index + 1:]
+    return source, len(removals)
+
+def normalize_hline_row_boundaries(source: str) -> tuple[str, int]:
+    """Ensure a table row terminator precedes an otherwise misplaced hline."""
+    source, odd_count = re.subn(
+        r"(?m)^([ \t]*)(?:\\){3,}[ \t]*\n(?=[ \t]*\\hline)",
+        r"\1\\\\\n",
+        source,
+    )
+    source, missing_count = re.subn(
+        r"(?m)(?<!\\\\)\n(\s*)\\hline", r"\\\\\n\1\\hline", source
+    )
+    return source, odd_count + missing_count
 
 
 def normalize_standalone_newlines(source: str) -> tuple[str, int]:

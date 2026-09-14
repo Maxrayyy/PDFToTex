@@ -96,6 +96,34 @@ class FieldAnnotationTests(unittest.TestCase):
         self.assertEqual([], [issue for issue in validate_latex(
             annotated, require_sync_safe=False) if issue.severity == "error"])
 
+    def test_multiline_field_uses_its_own_column_when_rows_follow(self) -> None:
+        """A later candidate must not overwrite the multiline field's column."""
+        source = (
+            "\\begin{tabular}{|l|p{10cm}|}\n"
+            "Label & Details\\\\\\hline\n"
+            "Investigation &\n"
+            "% #VALUE_ID: LEX-P0007-V0005\n"
+            "% #FIELD_VALUE: Investigation\n"
+            "\\fieldvalue{First paragraph.\\par\n"
+            "Second paragraph.}\\\\\n"
+            "Result &\n"
+            "% #VALUE_ID: LEX-P0007-V0006\n"
+            "% #FIELD_VALUE: Result\n"
+            "\\fieldvalue{Unchanged}\\\\\n"
+            "\\end{tabular}\n"
+        )
+        annotated, records, _ = annotate_fields(
+            source, namer=HeuristicBatchNamer()
+        )
+        self.assertEqual(["LEX-P0007-V0005", "LEX-P0007-V0006"],
+                         [record.field_id for record in records])
+        self.assertIn(
+            r"\hwfield{LEX-P0007-V0005}{\fieldvalue{First paragraph.",
+            annotated,
+        )
+        self.assertEqual([], [issue for issue in validate_latex(
+            annotated, require_sync_safe=False) if issue.severity == "error"])
+
     def test_tabularnewline_stays_outside_field_wrapper(self) -> None:
         source = (
             "\\begin{tabular}{|l|l|}\n"

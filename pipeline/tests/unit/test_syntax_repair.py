@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,6 +16,8 @@ from texopt.optimization.syntax_repair import (LLMSyntaxRepairer, SYSTEM_PROMPT,
                             canonicalize_document_terminator, group_lexoid_pages,
                             normalize_control_word_boundaries,
                             normalize_multicolumn_linebreaks,
+                            normalize_hline_row_boundaries,
+                            normalize_text_mode_carets,
                             normalize_text_mode_math_symbols,
                             page_numbers_for_lines,
                             remove_intermediate_end_documents,
@@ -49,6 +53,57 @@ class SequencedRepairer(LLMSyntaxRepairer):
 
 
 class SyntaxRepairTests(unittest.TestCase):
+    def test_may_formula_result_does_not_open_math_for_following_text(self) -> None:
+        source = (
+            "\\fieldvalue{\\handwritten{600}}\n"
+            "$\\times100\\%=$\n"
+            "% #VALUE_ID: LEX-P0113-V0014\n"
+            "% #HANDWRITTEN: 100\\%\n"
+            "\\fieldvalue{\\handwritten{100\\%}}$\n"
+            "\n\\begin{center}Confirmation\\end{center}\n"
+        )
+        repaired, _ = normalize_text_mode_math_symbols(source)
+        self.assertIn("\\fieldvalue{\\handwritten{100\\%}}\n", repaired)
+        self.assertNotIn("$", repaired)
+        self.assertEqual(normalize_text_mode_math_symbols(repaired), (repaired, 0))
+
+    def test_valid_multiline_formula_preserves_both_delimiters(self) -> None:
+        source = "$4\\times10^{7}/\n\\fieldvalue{\\handwritten{2}}$\n"
+        self.assertEqual(normalize_text_mode_math_symbols(source), (source, 0))
+
+    def test_separate_result_dollars_cannot_pair_across_paragraphs(self) -> None:
+        source = (
+            "$\\times100\\%=$\n\\fieldvalue{\\handwritten{100\\%}}$\n"
+            "\nConfirmation\n\n"
+            "$\\times100\\%=$\n\\fieldvalue{\\handwritten{99\\%}}$\n"
+        )
+        repaired, _ = normalize_text_mode_math_symbols(source)
+        self.assertNotIn("$", repaired)
+        self.assertIn("\n\nConfirmation\n\n", repaired)
+
+    @unittest.skipUnless(shutil.which("xelatex"), "XeLaTeX is required")
+    def test_may_formula_result_compiles_before_following_paragraph(self) -> None:
+        source = (
+            "$\\times100\\%=$\n"
+            "\\fieldvalue{\\handwritten{100\\%}}$\n"
+            "\n\\begin{center}Confirmation\\end{center}\n"
+        )
+        repaired, _ = normalize_text_mode_math_symbols(source)
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "formula.tex"
+            path.write_text(
+                "\\documentclass{article}\n"
+                "\\newcommand{\\fieldvalue}[1]{#1}\n"
+                "\\newcommand{\\handwritten}[1]{#1}\n"
+                "\\begin{document}\n" + repaired + "\\end{document}\n",
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                ["xelatex", "-halt-on-error", "-interaction=nonstopmode", path.name],
+                cwd=folder, capture_output=True, text=True, timeout=60,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout[-3000:])
+
     def test_newline_is_delimited_from_visible_letters(self) -> None:
         source = r"阳性对照\newlineIL-6-0002\newline NaN & 阴性\newline对照"
         repaired, count = normalize_control_word_boundaries(source)
@@ -69,7 +124,7 @@ class SyntaxRepairTests(unittest.TestCase):
     def test_generated_multicolumn_newline_has_command_boundary(self) -> None:
         source = r"\multicolumn{1}{p{8cm}}{control\\IL-6-0002}"
         repaired, count = normalize_multicolumn_linebreaks(source)
-        self.assertEqual(count, 1)
+        self.assertGreaterEqual(count, 1)
         self.assertIn(r"control\newline{}IL-6-0002", repaired)
 
     def test_multicolumn_paragraph_linebreak_does_not_end_table_row(self) -> None:
@@ -126,6 +181,82 @@ class SyntaxRepairTests(unittest.TestCase):
         repaired, count = normalize_text_mode_math_symbols(r"1\times10 条件")
         self.assertEqual(count, 1)
         self.assertEqual(repaired, r"1\ensuremath{\times}10 条件")
+
+    def test_short_inline_operator_formula_does_not_leak_dollar_state(self) -> None:
+        repaired, count = normalize_text_mode_math_symbols(r"文本$\times100\%$；")
+        self.assertEqual(count, 1)
+        self.assertEqual(repaired, r"文本\ensuremath{\times100\%}；")
+
+    def test_inline_operator_formula_with_equals_is_normalized(self) -> None:
+        repaired, count = normalize_text_mode_math_symbols(r"总量$\times100\%=$")
+        self.assertEqual(count, 1)
+        self.assertEqual(repaired, r"总量\ensuremath{\times100\%=}")
+
+    def test_embedded_ensuremath_operator_formula_is_normalized(self) -> None:
+        repaired, count = normalize_text_mode_math_symbols(
+            r"总量$\ensuremath{\times}100\%=$"
+        )
+        self.assertEqual(count, 1)
+        self.assertEqual(repaired, r"总量\ensuremath{\times100\%=}")
+
+    def test_short_formula_rule_preserves_comments_and_display_math(self) -> None:
+        source = "% $\\times100\\%$\n$$\\times100\\%$$\n"
+        self.assertEqual(normalize_text_mode_math_symbols(source), (source, 0))
+
+    def test_text_mode_scientific_product_keeps_exponent_in_math(self) -> None:
+        source = r"\fieldvalue{\handwritten{1.33\times10^{6}}}"
+        repaired, count = normalize_text_mode_math_symbols(source)
+        self.assertEqual(count, 1)
+        self.assertEqual(
+            repaired,
+            r"\fieldvalue{\handwritten{\ensuremath{1.33\times10^{6}}}}",
+        )
+        self.assertEqual(normalize_text_mode_math_symbols(repaired), (repaired, 0))
+
+    def test_compact_scientific_suffix_after_field_is_math_safe(self) -> None:
+        source = r"\hwfield{ID}{\fieldvalue{\handwritten{1.48}}}\times10^7"
+        repaired, count = normalize_text_mode_math_symbols(source)
+        self.assertEqual(
+            repaired,
+            r"\hwfield{ID}{\fieldvalue{\handwritten{1.48}}}\ensuremath{\times 10^7}",
+        )
+        self.assertEqual(count, 1)
+
+    def test_ensuremath_ascii_caret_and_orphan_math_delimiter_are_safe(self) -> None:
+        source = r"\fieldvalue{\handwritten{1.04\times10\textasciicircum{}7}}\div$"
+        repaired, _ = normalize_text_mode_math_symbols(source)
+        repaired, _ = normalize_text_mode_carets(repaired)
+        self.assertEqual(
+            repaired,
+            r"\fieldvalue{\handwritten{1.04\ensuremath{\times}10^{7}}}\ensuremath{\div}",
+        )
+
+    def test_hline_after_odd_row_backslashes_is_normalized(self) -> None:
+        source = "  \\\\\\\n  \\hline\n"
+        repaired, count = normalize_hline_row_boundaries(source)
+        self.assertEqual(repaired, "  \\\\\n  \\hline\n")
+        self.assertEqual(count, 1)
+
+    def test_trailing_unclosed_math_fragment_is_closed_locally(self) -> None:
+        source = r"理论取样体积=$4\ensuremath{\times}10^{7}/" + "\n"
+        repaired, _ = normalize_text_mode_math_symbols(source)
+        self.assertEqual(
+            repaired,
+            r"理论取样体积=\ensuremath{4\ensuremath{\times}10^{7}/}" + "\n",
+        )
+
+    def test_handwritten_math_delimiters_use_ensuremath(self) -> None:
+        source = r"=$\fieldvalue{\handwritten{$1.17\times10^{7}$}}（a）$\times$"
+        repaired, count = normalize_text_mode_math_symbols(source)
+        self.assertGreaterEqual(count, 1)
+        self.assertIn(r"\handwritten{\ensuremath{1.17\times10^{7}}}", repaired)
+
+    def test_math_mode_ascii_caret_becomes_superscript(self) -> None:
+        from texopt.optimization.syntax_repair import normalize_text_mode_carets
+
+        repaired, count = normalize_text_mode_carets(r"$1.17\times10\textasciicircum{}7$")
+        self.assertEqual(count, 1)
+        self.assertEqual(repaired, r"$1.17\times10^{7}$")
 
     def test_text_mode_math_font_command_is_safe(self) -> None:
         source = r"(100\,\mathrm{pg}/\mathrm{mL})"

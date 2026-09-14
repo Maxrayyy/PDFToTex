@@ -39,6 +39,11 @@ def validate_latex(tex: str, require_sync_safe: bool = False) -> List[SyntaxIssu
     issues.extend(_brace_issues(masked))
     issues.extend(_environment_issues(masked))
     issues.extend(_table_alignment_issues(tex, masked))
+    for position, delimiter in unclosed_math_delimiters(tex):
+        issues.append(SyntaxIssue(
+            "error", "UNCLOSED_MATH", _line(tex, position),
+            f"math delimiter {delimiter!r} crosses a paragraph/page boundary or is unclosed",
+        ))
 
     for match in ILLEGAL_TABULAR_WIDTH.finditer(masked):
         issues.append(SyntaxIssue(
@@ -61,6 +66,47 @@ def validate_latex(tex: str, require_sync_safe: bool = False) -> List[SyntaxIssu
             ))
             break
     return issues
+
+
+def math_boundary_tokens(tex: str):
+    """Yield TeX control tokens plus real paragraph and source-page boundaries."""
+    masked = _mask_verbatim(tex)
+    document = re.search(r"\\begin\s*\{document\}", mask_comments(masked))
+    start = document.end() if document else 0
+    for token in re.finditer(
+        r"(?m)%[^\n]*|\\[a-zA-Z@]+|\\[\s\S]|\$\$?|^[ \t]*\r?$", masked[start:]
+    ):
+        value = token.group()
+        if value.startswith("%"):
+            if not re.fullmatch(r"%\s*LEXOID_PAGE_COMPLETED:\s*\d+\s*/\s*\d+\s*", value):
+                continue
+            value = r"\LexoidPageEnd"
+        elif not value.strip():
+            value = r"\par"
+        elif value == r"\end" and re.match(r"\s*\{document\}", masked[start + token.end():]):
+            value = r"\LexoidPageEnd"
+        yield start + token.start(), value
+
+
+def unclosed_math_delimiters(tex: str) -> list[tuple[int, str]]:
+    """Track explicit math across physical lines, respecting paragraph/page scope."""
+    closing = {"$": "$", "$$": "$$", r"\(": r"\)", r"\[": r"\]"}
+    opened: tuple[int, str] | None = None
+    unclosed: list[tuple[int, str]] = []
+    for position, value in math_boundary_tokens(tex):
+        if value in {r"\LexoidPageStart", r"\LexoidPageEnd", r"\par"}:
+            if opened:
+                unclosed.append(opened)
+                opened = None
+        elif opened and value == closing[opened[1]]:
+            opened = None
+        elif opened is None and value in closing:
+            opened = (position, value)
+        elif opened is None and value in {r"\)", r"\]"}:
+            unclosed.append((position, value))
+    if opened:
+        unclosed.append(opened)
+    return unclosed
 
 
 def _alignment_colspec(head: str, env: str) -> str:

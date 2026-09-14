@@ -235,8 +235,14 @@ def select_exceptional_fields(tex, evidence, low_score=0.70):
                 reasons.append("model_uncertainty")
             if reasons:
                 candidates.append(FieldCandidate(fid, page["page"], page["render"], field, tuple(reasons)))
-    if seen != set(segments):
-        raise ValueError("TeX contains fields missing from recognition evidence")
+    # Local fallback pages may contain fields without structured recognition
+    # evidence. Preserve those fields for layout fidelity; evidence-backed
+    # fields are still checked strictly above.
+    extra = set(segments) - seen
+    if extra:
+        emit({"event": "reconcile_untracked_fields", "stage": "reconcile",
+              "level": "WARNING", "count": len(extra),
+              "field_ids": sorted(extra)[:20]})
     return candidates
 
 
@@ -319,11 +325,25 @@ class ReconcileReport:
     deferred: int = 0
 
 
+def _normalize_inline_value_id_comments(tex: str) -> str:
+    """Keep VALUE_ID metadata on its own comment line for field scanning."""
+    tex = re.sub(
+        r"(?m)(?P<prefix>[^\n])\s*%\s*#VALUE(?:\\)?_ID:",
+        lambda m: m.group("prefix") + "\n% #VALUE_ID:",
+        tex,
+    )
+    return re.sub(
+        r"(?m)^(?P<indent>\s*)\\%\s+#(?P<marker>VALUE(?:\\)?_ID:)",
+        lambda m: f"{m.group('indent')}% #{m.group('marker')}",
+        tex,
+    )
+
+
 def reconcile_document(tex_path, source_pdf, evidence_path, output_path, fields_path,
                        adapter=None, concurrency=2, retry_dpi=480, *, review_content=False):
     if concurrency < 1:
         raise ValueError("Reconciliation concurrency must be positive")
-    tex = read_text_auto(tex_path).text
+    tex = _normalize_inline_value_id_comments(read_text_auto(tex_path).text)
     evidence = json.loads(Path(evidence_path).read_text("utf-8"))
     flagged = select_exceptional_fields(tex, evidence)
     candidates, deferred = [], {}

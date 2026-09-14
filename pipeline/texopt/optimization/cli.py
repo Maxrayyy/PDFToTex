@@ -32,7 +32,7 @@ from .syntax_repair import (LLMSyntaxRepairer, canonicalize_document_terminator,
                             page_diagnostic_hints,
                             page_numbers_for_lines,
                             repair_invariant_violations)
-from .tex_tables import TableStat, transform_tex
+from .tex_tables import TableStat, _read_balanced, transform_tex
 from ..core.textio import read_text_auto, write_utf8_atomic
 
 
@@ -173,34 +173,58 @@ def _risks(src: str) -> list:
             for r in opaque.format_guard(src)]
 
 
-_HANDWRITTEN_VALUE = re.compile(r"\\handwritten\{([^{}]*)\}")
-_HANDWRITTEN_SCI = re.compile(r"(?<![A-Za-z0-9])([0-9]+(?:[.][0-9]+)?)\^([0-9]+)")
+_HANDWRITTEN_VALUE = re.compile(r"\\handwritten\s*\{")
+_HANDWRITTEN_SCI = re.compile(
+    r"(?<![A-Za-z0-9])([0-9]+(?:[.][0-9]+)?)\^(?:\{([0-9]+)\}|([0-9]+))"
+)
 _HANDWRITTEN_MATH = re.compile(r"\$(?:\\.|[^$])*\$")
 _HANDWRITTEN_ESCAPES = {"&": r"\&", "%": r"\%", "$": r"\$", "#": r"\#",
                         "_": r"\_", "~": r"\textasciitilde{}", "^": r"\textasciicircum{}"}
 
 
 def sanitize_handwritten_fields(src: str) -> str:
+    def escape_plain(value: str) -> str:
+        result = []
+        index = 0
+        while index < len(value):
+            char = value[index]
+            if char == "\\" and index + 1 < len(value):
+                # Preserve an existing TeX escape (for example ``\%`` or a
+                # nested command) instead of turning it into ``\\%``.
+                result.append(value[index:index + 2])
+                index += 2
+                continue
+            result.append(_HANDWRITTEN_ESCAPES.get(char, char))
+            index += 1
+        return "".join(result)
+
     def escape_literal(value: str) -> str:
         out, end = [], 0
         for sci in _HANDWRITTEN_SCI.finditer(value):
-            out.append("".join(_HANDWRITTEN_ESCAPES.get(c, c)
-                               for c in value[end:sci.start()]))
-            out.append(sci.group(1) + r"\textsuperscript{" + sci.group(2) + "}")
+            out.append(escape_plain(value[end:sci.start()]))
+            exponent = sci.group(2) or sci.group(3)
+            out.append(sci.group(1) + r"\textsuperscript{" + exponent + "}")
             end = sci.end()
-        out.append("".join(_HANDWRITTEN_ESCAPES.get(c, c) for c in value[end:]))
+        out.append(escape_plain(value[end:]))
         return "".join(out)
 
-    def replace(match: re.Match[str]) -> str:
-        value = match.group(1)
+    edits = []
+    for match in _HANDWRITTEN_VALUE.finditer(src):
+        argument = _read_balanced(src, match.end() - 1, "{", "}")
+        if argument is None:
+            continue
+        value, end = argument
         out, cursor = [], 0
         for math in _HANDWRITTEN_MATH.finditer(value):
             out.append(escape_literal(value[cursor:math.start()]))
             out.append(math.group(0))
             cursor = math.end()
         out.append(escape_literal(value[cursor:]))
-        return r"\handwritten{" + "".join(out) + "}"
-    return _HANDWRITTEN_VALUE.sub(replace, src)
+        replacement = r"\handwritten{" + "".join(out) + "}"
+        edits.append((match.start(), end, replacement))
+    for start, end, replacement in reversed(edits):
+        src = src[:start] + replacement + src[end:]
+    return src
 
 
 def _compile_latex(tex_path: Path, source_dir: Path, engine: str,
@@ -381,7 +405,7 @@ def cmd_optimise(a: argparse.Namespace) -> int:
             candidate_introduced_hard_alignment = any(
                 issue.code == "TABLE_ALIGNMENT_MISMATCH" for issue in repaired_errors
             )
-            if not original_errors or (
+            if not original_errors or len(repaired_errors) >= len(original_errors) or (
                 original_underfull_only and candidate_introduced_hard_alignment
             ):
                 src = repair_input
@@ -446,6 +470,14 @@ def cmd_optimise(a: argparse.Namespace) -> int:
                 (issue.code, issue.message) for issue in repaired_errors
             ]
             if src == previous_src or current_error_signature == previous_error_signature:
+                # Never retain a changed candidate that did not reduce the
+                # structural error set.  Subsequent retries must start from
+                # the last known-safe document, not from a corrupted page.
+                src = previous_src
+                repaired_issues = validate_latex(src, require_sync_safe=False)
+                repaired_errors = [
+                    issue for issue in repaired_issues if issue.severity == "error"
+                ]
                 _event(
                     "SYNTAX_REPAIR_TARGETED_STALLED",
                     "targeted syntax repair made no structural progress",
@@ -463,18 +495,28 @@ def cmd_optimise(a: argparse.Namespace) -> int:
                targeted_retry_stats=targeted_retry_stats,
                remaining_structural_errors=[i.payload() for i in repaired_errors])
         if repaired_errors:
-            _event(
-                "SYNTAX_REPAIR_BLOCKED",
-                "structural errors remain after targeted syntax repair",
-                level="ERROR", errors=[i.payload() for i in repaired_errors],
-                policy="stop_before_optimizer_and_retry_later",
-            )
-            print(
-                "ERROR: structural errors remain after targeted syntax repair; "
-                "stopping before table conversion.",
-                file=sys.stderr,
-            )
-            return 6
+            # The model is not allowed to hand an invalid document to the
+            # optimizer.  Restore the pre-repair source so no damaged
+            # candidate can be persisted or reused on a later restart.
+            src = repair_input
+            src, _ = normalize_tex(src)
+            repaired_issues = validate_latex(src, require_sync_safe=False)
+            repaired_errors = [
+                issue for issue in repaired_issues if issue.severity == "error"
+            ]
+            if repaired_errors:
+                _event(
+                    "SYNTAX_REPAIR_BLOCKED",
+                    "structural errors remain after targeted syntax repair",
+                    level="ERROR", errors=[i.payload() for i in repaired_errors],
+                    policy="stop_before_optimizer_and_retry_later",
+                )
+                print(
+                    "ERROR: structural errors remain after targeted syntax repair; "
+                    "stopping before table conversion.",
+                    file=sys.stderr,
+                )
+                return 6
         # This is an internal stage, not a deliverable. Persist it only when the
         # caller explicitly requests a debugging/audit snapshot.
         if a.syntax_repair_output:

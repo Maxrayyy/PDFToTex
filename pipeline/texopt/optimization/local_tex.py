@@ -11,6 +11,8 @@ from pylatexenc.macrospec import MacroSpec
 from .syntax_check import ENV_RE, _mask_verbatim
 from .syntax_repair import (normalize_control_word_boundaries, normalize_math_blank_lines,
                             normalize_multicolumn_linebreaks, normalize_stray_cjk_backslashes,
+                            normalize_unmatched_closing_braces,
+                            normalize_hline_row_boundaries,
                             normalize_standalone_newlines, normalize_text_mode_carets,
                             normalize_text_mode_math_symbols)
 from .tex_tables import (_peel_prefix, _read_balanced, _skip_ws, alignment_colspec, iter_structural,
@@ -101,6 +103,21 @@ def normalize_experimental_figure_frames(source):
     for (start, end), replacement in sorted(edits.items(), reverse=True):
         source = source[:start] + replacement + source[end:]
     return source, len(edits)
+
+
+def normalize_missing_graphics(source):
+    """Guard model-referenced images that are not shipped with the document."""
+    pattern = re.compile(
+        r"\\includegraphics(?P<options>\[[^\]\n]*\])?\{(?P<path>[^{}\n]+)\}"
+    )
+
+    def replace(match):
+        options = match.group("options") or ""
+        path = match.group("path")
+        command = rf"\includegraphics{options}{{{path}}}"
+        return rf"\IfFileExists{{{path}}}{{{command}}}{{\LexoidExperimentalFigure{{\linewidth}}{{1.2cm}}}}"
+
+    return pattern.subn(replace, source)
 
 
 def normalize_panel_rules(source):
@@ -306,6 +323,7 @@ PACKAGE_USES = {
     "array": r"\\(?:arraybackslash|newcolumntype)\b|\\begin\{array\}",
     "amsmath": r"\\(?:text|overset|underset|dfrac|tfrac)\b|\\begin\{(?:aligned|align\*?|gather\*?)\}",
     "amssymb": r"\\(?:diagup|diagdown|checkmark|square|boxtimes)\b",
+    "upgreek": r"\\up(?:alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega)\b",
     "graphicx": r"\\(?:includegraphics|resizebox|rotatebox|scalebox)\b",
     "pict2e": r"\\begin\{picture\}",
     "multirow": r"\\multirow\b",
@@ -475,7 +493,6 @@ def normalize_unclosed_field_rows(source):
             changed += 1
     return "".join(lines), changed
 
-
 def normalize_unclosed_tabular_specs(source):
     """Close a truncated repeated-column specification on its begin line."""
     lines = source.splitlines(keepends=True)
@@ -548,6 +565,37 @@ def normalize_uniform_table_overflow(source):
     return source, len(edits)
 
 
+def normalize_handwritten_raw_superscripts(source):
+    """Keep OCR superscripts in plain handwritten text out of math mode."""
+    pattern = re.compile(
+        r"(?P<prefix>\\handwritten\{[^${}\n]*)(?:\^|\\textasciicircum\{\})"
+        r"(?:\{(?P<braced>[^{}\n]+)\}|(?P<bare>[A-Za-z0-9]))"
+    )
+    return pattern.subn(
+        lambda match: (match.group("prefix") + r"\textsuperscript{" +
+                       (match.group("braced") or match.group("bare")) + "}"),
+        source,
+    )
+
+
+def normalize_field_metadata_comments(source: str) -> tuple[str, int]:
+    """Restore metadata markers escaped during table-cell assembly."""
+    pattern = re.compile(
+        r"(?m)^(?P<indent>\s*)\\%(?P<space>\s+)"
+        r"(?P<marker>#(?:VALUE|FIELD)(?:\\)?_[A-Z]+:)"
+    )
+    return pattern.subn(
+        lambda match: f"{match.group('indent')}% {match.group('marker')}",
+        source,
+    )
+
+
+def normalize_inline_field_metadata_comments(source: str) -> tuple[str, int]:
+    """Put field metadata markers on a physical comment line before the field."""
+    pattern = re.compile(r"(?m)(?P<prefix>[^\n])\s*%\s*#VALUE(?:\\)?_ID:")
+    return pattern.subn(lambda match: match.group("prefix") + "\n% #VALUE_ID:", source)
+
+
 def normalize_page_boundary_closures(source):
     """Close unambiguous groups/environments before a page completion marker."""
     marker = re.compile(r"\n(?=%\s*LEXOID_PAGE_COMPLETED:\s*\d+/\d+)")
@@ -587,12 +635,18 @@ def normalize_tex(source):
         ("control_word_boundaries", normalize_control_word_boundaries),
         ("text_math_symbols", normalize_text_mode_math_symbols),
         ("text_mode_carets", normalize_text_mode_carets),
+        ("handwritten_raw_superscripts", normalize_handwritten_raw_superscripts),
+        ("field_metadata_comments", normalize_field_metadata_comments),
+        ("inline_field_metadata_comments", normalize_inline_field_metadata_comments),
         ("stray_cjk_backslashes", normalize_stray_cjk_backslashes),
+        ("unmatched_closing_braces", normalize_unmatched_closing_braces),
+        ("hline_row_boundaries", normalize_hline_row_boundaries),
         ("standalone_newlines", normalize_standalone_newlines),
         ("multicolumn_linebreaks", normalize_multicolumn_linebreaks),
         ("math_blank_lines", normalize_math_blank_lines),
         ("ulem_text_scripts", normalize_ulem_text_scripts),
         ("experimental_figure_frames", normalize_experimental_figure_frames),
+        ("missing_graphics", normalize_missing_graphics),
         ("panel_rules", normalize_panel_rules),
         ("split_paragraph_rows", normalize_split_paragraph_rows),
         ("table_row_endings", normalize_table_row_endings),

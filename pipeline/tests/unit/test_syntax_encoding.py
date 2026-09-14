@@ -89,6 +89,13 @@ class SyntaxTests(unittest.TestCase):
         source = r"\fieldvalue{\handwritten{100--1000$\mu$l}}"
         self.assertEqual(sanitize_handwritten_fields(source), source)
 
+    def test_optimizer_handwritten_sanitizer_handles_nested_math_commands(self) -> None:
+        source = r"\fieldvalue{\handwritten{10mL=5\ensuremath{\times}10^7个细胞}}"
+        fixed = sanitize_handwritten_fields(source)
+        self.assertIn(r"\ensuremath{\times}", fixed)
+        self.assertIn(r"10\textsuperscript{7}", fixed)
+        self.assertNotIn(r"10^7", fixed)
+
     def test_strikeout_loads_missing_dependency_without_option_clash(self) -> None:
         for existing in ("", r"\usepackage{ulem}", r"\newcommand{\sout}[1]{#1}"):
             with self.subTest(existing=existing), tempfile.TemporaryDirectory() as directory:

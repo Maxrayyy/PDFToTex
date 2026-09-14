@@ -435,7 +435,11 @@ def annotate_fields(tex: str,
                     value = fieldvalue
                 if value is None:
                     continue
-                candidates.append((li, cells[c_i], value, f"r{r_i:02d}c{c_i:02d}",
+                # Keep the physical column with the candidate.  The rewrite phase
+                # needs it to distinguish a genuinely multiline field from a
+                # neighbouring cell; relying on the collection loop's stale
+                # ``c_i`` corrupts mixed-column rows and can unbalance braces.
+                candidates.append((li, c_i, cells[c_i], value, f"r{r_i:02d}c{c_i:02d}",
                                    row_header, headers[c_i] if c_i < len(headers) else "",
                                    value_id, field_label))
         if not candidates:
@@ -451,7 +455,7 @@ def annotate_fields(tex: str,
             headers=headers,
             sample_rows=sample_rows,
             fields=[FieldSpec(key=k, row_header=rh, col_header=ch, value=v, label=label)
-                    for (_li, _p, v, k, rh, ch, _vid, label) in candidates],
+                    for (_li, _ci, _p, v, k, rh, ch, _vid, label) in candidates],
             structure=[[multicolumn_span(_cell_payload(masked[li]) or "") for li in row]
                        for row in block.rows],
         )
@@ -460,7 +464,7 @@ def annotate_fields(tex: str,
         stats[naming.source] = stats.get(naming.source, 0) + 1
 
         field_ids = {}
-        for (li, payload, value, key, row_hdr, col_hdr, value_id, field_label) in candidates:
+        for (li, c_i, payload, value, key, row_hdr, col_hdr, value_id, field_label) in candidates:
             semantic = naming.fields.get(key, key)
             # The VALUE_ID currently present in the repaired source is authoritative
             # downstream. Syntax repair may have made it meaningful; semantic_alias
