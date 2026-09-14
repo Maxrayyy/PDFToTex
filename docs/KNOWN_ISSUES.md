@@ -5,6 +5,7 @@
 ## 问题索引
 
 - [科学计数法与数学模式边界](issues/scientific-notation.md)
+- [表格正文中的字面井号](issues/literal-hash.md)
 - [重复或奇数次反斜杠](issues/repeated-backslashes.md)
 - [大括号与 `\\parbox` 参数错位](issues/brace-parameter-drift.md)
 - [表格列数与边界错误](issues/table-boundaries.md)
