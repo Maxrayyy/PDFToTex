@@ -1,4 +1,29 @@
-"""Resume these approved batches with explicit provenance for reused old pages."""
+"""用途：复用已经核准的旧识别缓存，将后续识别切换到 reasoning_effort=none 后继续流水线。
+
+这是已有缓存的专用恢复工具，不是新 PDF 的普通转换入口。
+必须在已配置 lexoid、texopt、pypdfium2 及完整流水线依赖的环境中运行。
+以下示例在 PDFToTex 根目录执行，实际使用时替换三个路径/键参数：
+    python scripts/resume-none/run.py --source /input/example.pdf --output /data/workers/example --legacy-key OLD_CACHE_KEY --prepare-only
+    python scripts/resume-none/run.py --source /input/example.pdf --output /data/workers/example --legacy-key OLD_CACHE_KEY
+
+参数和路径配置：
+    --source：原始 PDF 文件的路径；必须与旧缓存对应的源文件一致。
+    --output：该 PDF 已有的工作目录，旧缓存应在其 .cache/recognition 下。
+    --legacy-key：已有旧缓存的完整键值，不是批次号，也不能任意填写。
+    --prepare-only：只准备恢复缓存和备份，不启动后续流水线；它仍然会写文件！
+建议使用绝对路径；命令行中相对路径以当前工作目录为准。
+
+环境必须符合已核准配置：LEXOID_MODEL=gpt-5.6-sol、VISION_FALLBACK_MODEL=gpt-6-astra、
+RENDER_DPI=240、VISION_CONCURRENCY=2；其他流水线环境与模型凭据沿用项目现有配置。
+发布位置由 PIPELINE_PUBLISH_ROOT 控制，未指定时遵循流水线默认逻辑。
+识别配置在代码中固定为 OCR none、重试渲染 480 DPI、reasoning_effort=none 等设置，
+不应为绕过校验随意修改；PDF 哈希、依赖版本和缓存配置共同决定缓存键。
+
+副作用：生成/核对 --output/resume-none.json，导入带来源说明的新缓存；
+将已有 raw/evidence 产物首次备份到 --output/resume-before-none，不覆盖已有同名备份。
+不带 --prepare-only 时，还会调用模型/流水线并更新识别结果、证据和发布产物。
+发现旧缓存变动、新旧结果冲突或配置不匹配时会拒绝继续，需先查明原因。
+"""
 
 import argparse
 from dataclasses import replace

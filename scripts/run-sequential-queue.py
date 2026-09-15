@@ -1,4 +1,33 @@
-"""Run approved PDFs serially in one worker, retaining per-document caches."""
+"""用途：在一个已配置的工作进程中，按队列顺序处理 PDF，并保留每份文档的缓存。
+
+推荐在项目已有的流水线容器/环境中运行；需要 texopt、lexoid、pypdfium2 及流水线依赖。
+使用了 fcntl 文件锁，适用于 Linux/macOS；不能直接作为原生 Windows 脚本使用。
+以下示例在 PDFToTex 根目录执行（需预先配置模块搜索路径、模型凭据和环境变量）：
+    python scripts/run-sequential-queue.py /data/workers/queues/example.json --prepare-only
+    python scripts/run-sequential-queue.py /data/workers/queues/example.json
+
+路径配置不在本脚本顶部，而是在队列 JSON 中；各字段用途如下：
+    sources：按处理顺序排列的 PDF 路径数组，文件名去掉扩展名后必须互不重复。
+    container：监控配置中该工作进程/容器的名称；脚本不会自行创建容器。
+    monitor_config：监控配置 JSON 的路径，正式运行时会更新其中 containers 列表。
+    host_data：宿主机 data 目录的绝对路径，用于将容器 /data 路径转换为监控路径。
+    source_root：可选，PDF 的共同根目录；配置后会在发布目录下保留相对目录结构。
+请使用当前运行环境可访问的路径；工作目录固定为 /data/workers/<PDF文件名主干>，
+适合项目现有的 /data 挂载布局，并非任意本地路径直接可用的通用转换器。
+
+模型和发布路径从 BatchConfig.from_env() 读取；必须符合脚本已核准的检查条件：
+    LEXOID_MODEL=gpt-5.6-sol，VISION_FALLBACK_MODEL=gpt-6-astra，
+    RENDER_DPI=240，VISION_CONCURRENCY=2，RECONCILE_CONCURRENCY=2。
+优化器版本必须为 texopt-layout-v11-outline-field-safe。
+应设置 PIPELINE_PUBLISH_ROOT 为发布根目录，并按现有流水线要求配置其余模型/凭据。
+这些检查用于防止误用配置，不应仅为绕过报错而修改。
+
+--prepare-only：读取 PDF 页数并打印计划，不启动处理、不写队列状态或监控配置。
+正式运行：会调用模型/流水线、写缓存和产物、更新队列同名 .status.json 以及监控配置。
+任务失败后暂停队列，后续 PDF 保持 pending；再次运行会重建状态并依靠缓存恢复，
+并非依据上一份状态文件跳过 done。存在 resume-none.json 时调用 resume-none/run.py。
+不要同时启动同一队列；脚本使用队列 .lock 和监控 .queue.lock 文件防止写入冲突。
+"""
 
 import argparse
 from dataclasses import replace
