@@ -73,3 +73,18 @@ def test_old_tex_alone_is_not_proof_and_future_month_is_flagged(tmp_path):
     assert row['completed'] == 0 and row['status'] == '待核验'
     report = render_batch_report(settings, tmp_path / 'queues', '2026-09-09T18:00:00+08:00')
     assert '2027-07' in report and '未来年月' in report
+
+
+def test_operator_confirmed_batch_is_persistently_complete(tmp_path):
+    settings = {k: str(tmp_path / k) for k in ('source_root', 'publish_root', 'work_root')}
+    settings['confirmed_complete_batches'] = ['A31Z201202604022']
+    source_dir = Path(settings['source_root']) / 'U1/batches/A31Z201202604022'
+    source_dir.mkdir(parents=True)
+    (source_dir / 'a.pdf').write_bytes(b'pdf')
+    (source_dir / 'b.pdf').write_bytes(b'pdf')
+
+    row = collect_batches(settings, tmp_path / 'queues')[0]
+
+    assert row['completed'] == 2 and row['total'] == 2
+    assert row['status'] == '已完成'
+    assert '人工确认完成' in row['notes']

@@ -54,6 +54,7 @@ def collect_batches(settings, queue_dir):
     sources = Path(settings['source_root'])
     published = Path(settings['publish_root'])
     workers = Path(settings['work_root'])
+    confirmed_complete = set(settings.get('confirmed_complete_batches', []))
     jobs = {}
     for path in sorted(Path(queue_dir).glob('*.status.json'), key=lambda p: p.stat().st_mtime_ns):
         for job in _read_json(path).get('jobs', []):
@@ -104,7 +105,11 @@ def collect_batches(settings, queue_dir):
     for row in groups.values():
         counts = row.pop('counts')
         row['units'] = sorted(row['units'])
-        if counts['skipped'] == row['total']:
+        if row['code'] in confirmed_complete:
+            row['completed'] = row['total']
+            row['notes'].append('人工确认完成')
+            status = '已完成'
+        elif counts['skipped'] == row['total']:
             status = '已排除'
         elif row['completed'] == row['total']:
             status = '已完成'
