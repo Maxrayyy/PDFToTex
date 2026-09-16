@@ -22,6 +22,25 @@ def emit(event):
             print("[LLM_CALL_LOG_ERROR] Unable to append model call log", file=sys.stderr)
 
 
+def reconcile_cost_estimate(event):
+    """Reuse accounting prices for logs only; unavailable usage is not zero cost."""
+    from ..monitoring.daily_costs import billing_call, price_record
+    try:
+        path = Path(os.getenv('RECONCILE_PRICING_FILE') or Path(__file__).parents[1] / 'model_prices.json')
+        prices = json.loads(path.read_text(encoding='utf-8'))
+        call = billing_call(event, event['call_id'])
+        cost = price_record({'call_ids': [call['call_id']], 'billing_calls': [call],
+                             'billing_missing_records': 0}, prices)
+        cost.pop('by_model', None)
+        if not cost['priced_calls']:
+            cost.update(estimated_usd_low=None, estimated_usd_high=None)
+        return {**cost, 'currency': prices['currency'], 'pricing_source': prices.get('source'),
+                'estimated_only': True}
+    except (OSError, ValueError, KeyError, TypeError, ArithmeticError):
+        return {'estimated_usd_low': None, 'estimated_usd_high': None,
+                'estimated_only': True, 'reason': 'pricing_unavailable'}
+
+
 def request_json(request, timeout, *, stage, model, attempt=1, **scope):
     event = {"call_id": uuid.uuid4().hex, "stage": stage, "model": model,
              "attempt": attempt, "retry_count": attempt - 1, **scope,
@@ -44,12 +63,15 @@ def request_json(request, timeout, *, stage, model, attempt=1, **scope):
                      "output_tokens": raw.get("completion_tokens", raw.get("output_tokens")),
                      "total_tokens": raw.get("total_tokens")}
         choice = ((data or {}).get("choices") or [{}])[0]
-        emit({**event, "event": "finish", "seconds": time.monotonic() - started,
+        finished = {**event, "event": "finish", "seconds": time.monotonic() - started,
               "finished_at": datetime.now(timezone.utc).isoformat(),
               "status": "error" if error else "ok", "error_type": error,
               "finish_reason": choice.get("finish_reason", (data or {}).get("stop_reason")),
               "response_id": (data or {}).get("id"),
-              "usage": usage, "usage_raw": raw})
+              "usage": usage, "usage_raw": raw}
+        if stage == 'reconcile':
+            finished['cost_estimate'] = reconcile_cost_estimate(finished)
+        emit(finished)
 
 
 def summarize_calls(path, offset=0):

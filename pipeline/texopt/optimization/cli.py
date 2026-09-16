@@ -1184,7 +1184,8 @@ def cmd_reconcile(a) -> int:
     from .reconcile import FieldReconcileAdapter, reconcile_document
     report = reconcile_document(Path(a.input), Path(a.source_pdf), Path(a.recognition_evidence),
         Path(a.output), Path(a.fields), adapter=FieldReconcileAdapter(a.model),
-        concurrency=a.concurrency, retry_dpi=a.retry_dpi, review_content=a.review_content)
+        concurrency=a.concurrency, retry_dpi=a.retry_dpi, review_content=a.review_content,
+        max_page_requests=a.max_page_requests)
     _event("RECONCILE_FINISH", "field reconciliation completed", selected=report.selected,
            confirmed=report.confirmed, failed=report.failed, deferred=report.deferred,
            needs_review=sum(field["needs_review"] for field in report.fields), errors=report.errors)
@@ -1217,6 +1218,8 @@ def main(argv=None) -> int:
     r.add_argument("--model", help="field review model (environment: RECONCILE_MODEL)")
     r.add_argument("--retry-dpi", type=int, default=480)
     r.add_argument("--concurrency", type=int, default=2)
+    r.add_argument('--max-page-requests', type=int, choices=(1, 2, 3), default=2,
+                   help='persistent full-page call cap per source/page (default: 2, including failed calls)')
     r.add_argument("--review-content", action="store_true",
                    help="also review uncertain text/OCR/checkbox content; default: format errors only")
     r.set_defaults(func=cmd_reconcile)

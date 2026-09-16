@@ -16,3 +16,6 @@ texopt-pipeline = "texopt.runtime.pipeline_daemon:main"
 [tool.setuptools]
 packages = ["texopt", "texopt.core", "texopt.runtime", "texopt.monitoring", "texopt.recognition", "texopt.optimization"]
 package-dir = {texopt = "."}
+
+[tool.setuptools.package-data]
+texopt = ["model_prices.json"]
