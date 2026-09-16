@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from collections import defaultdict
+from contextlib import closing
 from datetime import datetime, timedelta
 import fcntl
 import hashlib
@@ -73,7 +74,8 @@ def state_databases(config):
 
 
 def completed_jobs(database):
-    with sqlite3.connect(database.as_uri() + "?mode=ro", uri=True, timeout=2) as db:
+    # SQLite's transaction context manager does not close the connection.
+    with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True, timeout=2)) as db:
         db.row_factory = sqlite3.Row
         jobs = [dict(row) for row in db.execute("SELECT * FROM jobs ORDER BY completed_at, id")]
     latest = {}

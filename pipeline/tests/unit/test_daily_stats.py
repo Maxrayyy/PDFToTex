@@ -5,7 +5,9 @@ import plistlib
 import sqlite3
 from unittest.mock import patch
 
-from texopt.monitoring.daily_stats import ZONE, call_summary, install, poll
+import pytest
+
+from texopt.monitoring.daily_stats import ZONE, call_summary, completed_jobs, install, poll
 from texopt.runtime.pipeline_state import SCHEMA
 
 
@@ -61,6 +63,26 @@ def fixture_job(tmp_path, batch="BATCH1", completed="2026-09-07T02:00:00+00:00")
 
 
 NOW = datetime(2026, 9, 7, 14, tzinfo=ZONE)
+
+
+@pytest.mark.parametrize("valid_schema", [True, False])
+def test_completed_jobs_closes_database_on_success_and_failure(tmp_path, valid_schema):
+    database = tmp_path / "pipeline.sqlite3"
+    connection = sqlite3.connect(database)
+    try:
+        if valid_schema:
+            connection.executescript(SCHEMA)
+        # Keep a reference so garbage collection cannot hide a leaked connection.
+        with patch("texopt.monitoring.daily_stats.sqlite3.connect", return_value=connection):
+            if valid_schema:
+                assert completed_jobs(database) == ([], [])
+            else:
+                with pytest.raises(sqlite3.OperationalError):
+                    completed_jobs(database)
+        with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
+            connection.execute("SELECT 1")
+    finally:
+        connection.close()
 
 
 def test_completed_output_counts_once_and_retains_missing_usage(tmp_path):
