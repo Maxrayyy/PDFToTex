@@ -19,7 +19,7 @@ from .tex_tables import (_peel_prefix, _read_balanced, _skip_ws, alignment_colsp
                          mask_comments, multicolumn_span, parse_colspec, split_align_body)
 
 
-VERSION = "local-tex-v6-nested-form-rows"
+VERSION = "local-tex-v7-structural-rule-boundaries"
 SUPPORT_BEGIN = "% >>> lexoid local support >>>"
 SUPPORT_END = "% <<< lexoid local support <<<"
 

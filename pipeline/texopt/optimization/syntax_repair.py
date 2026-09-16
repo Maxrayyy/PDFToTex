@@ -18,7 +18,8 @@ from .llm import ANTHROPIC_API_URL, _is_openai_model, openai_api_url
 from ..core.model_config import resolve_model
 from ..core.textio import write_utf8_atomic
 from .syntax_check import _mask_verbatim, math_boundary_tokens, unclosed_math_delimiters
-from .tex_tables import CS_RE, _read_balanced, _skip_ws, iter_structural, mask_comments
+from .tex_tables import (CS_RE, _peel_prefix, _read_balanced, _skip_rowbreak_options,
+                         _skip_ws, iter_structural, mask_comments)
 
 
 PAGE_COMPLETED = re.compile(
@@ -615,16 +616,64 @@ def normalize_unmatched_closing_braces(source: str) -> tuple[str, int]:
     return source, len(removals)
 
 def normalize_hline_row_boundaries(source: str) -> tuple[str, int]:
-    """Ensure a table row terminator precedes an otherwise misplaced hline."""
+    """Repair missing row endings, never adding a row before a legal rule.
+
+    A physical newline is not a TeX row boundary. Inspect table bodies instead
+    of guessing from the preceding two characters; comments, optional spacing,
+    explicit tabularnewline and the table's opening hline are all legal.
+    """
     source, odd_count = re.subn(
         r"(?m)^([ \t]*)(?:\\){3,}[ \t]*\n(?=[ \t]*\\hline)",
         r"\1\\\\\n",
         source,
     )
-    source, missing_count = re.subn(
-        r"(?m)(?<!\\\\)\n(\s*)\\hline", r"\\\\\n\1\\hline", source
-    )
-    return source, odd_count + missing_count
+    masked = _mask_verbatim(mask_comments(source))
+    edits = []
+
+    def scan(segment, base=0):
+        tokens = iter(iter_structural(segment))
+        for begin in tokens:
+            if begin.kind != "align_begin":
+                continue
+            end = next((token for token in tokens if token.kind == "align_end"), None)
+            if end is None:
+                continue
+            body = segment[begin.body_start:end.start]
+            offset = base + begin.body_start
+            if begin.name in {"tabular", "tabular*", "tabularx", "longtable"}:
+                cursor = boundary = depth = environments = 0
+                while cursor < len(body):
+                    if body[cursor] in "{}":
+                        depth += 1 if body[cursor] == "{" else -1
+                        cursor += 1
+                        continue
+                    token = CS_RE.match(body, cursor)
+                    if token is None:
+                        cursor += 1
+                        continue
+                    command = token.group()
+                    position, cursor = token.start(), token.end()
+                    if command in {r"\begin", r"\end"}:
+                        argument = _read_balanced(body, _skip_ws(body, cursor), "{", "}")
+                        if argument:
+                            environments += 1 if command == r"\begin" else -1
+                            cursor = argument[1]
+                        continue
+                    if depth or environments:
+                        continue
+                    if command in {r"\\", r"\tabularnewline", r"\tabularnewline*"}:
+                        cursor = _skip_rowbreak_options(body, cursor)
+                        boundary = cursor
+                    elif command == r"\hline":
+                        if _peel_prefix(body[boundary:position])[1].strip():
+                            edits.append(offset + position)
+                        boundary = cursor
+            scan(body, offset)
+
+    scan(masked)
+    for position in sorted(edits, reverse=True):
+        source = source[:position] + r"\tabularnewline" + source[position:]
+    return source, odd_count + len(edits)
 
 
 def normalize_standalone_newlines(source: str) -> tuple[str, int]:
