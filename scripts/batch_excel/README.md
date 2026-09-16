@@ -2,12 +2,25 @@
 
 Two reusable exporters with no batch-specific paths or TeX parsing:
 
-- `build_workbook.py`: four category sheets, one row per object.
+- `build_workbook.py`: 步骤总览 first, then 人员明细/物料明细/设备明细/环境明细, one row per object.
 - `build_hierarchy.py`: one hierarchy sheet, merged parent cells.
 
-Requires Python 3.10+ and `openpyxl`. Keep `common.py` and `temporal.py` beside both scripts
-when moving them. No Chinese field mapping or intermediate extraction files
-are needed.
+Requires Python 3.10+ and `openpyxl`. Keep `common.py`, `temporal.py` and
+`labels_zh.py` beside both scripts when moving them. JSON keys remain English;
+Excel headers, category labels, attribute names and sheet names are Chinese.
+Values remain unchanged. No intermediate extraction files are needed.
+
+## 中文显示字典
+
+两个脚本共同使用 `labels_zh.py`，无需配置批次路径。新增属性时，在
+`ATTRIBUTE_LABELS` 中添加 `'english_key': '中文名称'` 后重新运行导出命令。
+未登记字段会列出缺失项并停止，不会猜测翻译或覆盖已有 Excel。
+分类版的首个标签页“步骤总览”逐行列出全部步骤/表单，包括空表单；
+右侧的人员记录数、物料记录数、设备记录数、环境记录数与本次导出的去重后明细一致，
+空类别显示 0。不同角色分别计数，不按姓名合并；手工改动明细后需重新导出统计。
+层级版仍只有“步骤聚合层级表”，不增加额外标签页。
+扁平结构的 `subprocess` 显示为“大工序”，`stage` 显示为“阶段”；
+旧版嵌套结构的 `process`、`subprocess` 分别显示为“大工序”和“阶段”。
 
 ## Usage and Path Configuration
 
@@ -51,7 +64,7 @@ the current working directory, so absolute configuration paths are recommended.
           "equipment": [{
             "id": "O00002",
             "name": "Instrument",
-            "attributes": {"equipment_id": "00123", "custom_property": "value"}
+            "attributes": {"equipment_id": "00123", "notes": "value"}
           }],
           "environment": []
     }]
@@ -63,14 +76,14 @@ Structural keys and hierarchy arrays are required. Category arrays may be
 omitted (treated as empty). Names may be empty; attribute maps may be empty.
 Values and names may use any language. Attribute keys use English `snake_case`;
 values are strings, finite numbers, booleans or null, not nested arrays/objects.
-New attribute keys require no code changes. Unknown structural keys, old form
+New attribute keys require an entry in `labels_zh.py`. Unknown structural keys, old form
 ordinals, duplicate JSON keys and unsupported values produce errors rather
 than being silently discarded. Batch identifiers allow letters, digits, `_`,
 `.` and `-` for safe filenames.
 
 `subprocess` is the process title, and `form` is a string, not another array.
 Step and object IDs must be nonempty and unique within a batch; both exports
-retain them as `step_id` and `id`. Legacy nested `name` / `subprocess[]` /
+retain them as 步骤ID and 记录ID. Legacy nested `name` / `subprocess[]` /
 `step[]` / `form[]` inputs remain supported with their original column layout.
 
 ## Preservation and Verification
@@ -80,8 +93,8 @@ retain them as `step_id` and `id`. Legacy nested `name` / `subprocess[]` /
   Different form occurrences never deduplicate, even when their names match.
 - JSON order is preserved and the input is never rewritten. No source columns
   or form ordinals, colors, bold headings or decorative borders are added.
-- Attribute names colliding with category sheet headers receive `attribute_`
-  prefixes (e.g. `name` versus `attribute_name`), repeated if necessary.
+- Translated attribute names colliding with category sheet headers receive
+  `属性：` prefixes, repeated if necessary, without losing either value.
 - Leading-zero strings remain text. JSON numbers remain numeric, except integers
   longer than Excel's 15-digit precision, which become text to retain all digits.
 - Complete dates and times in date/time/validity fields become native Excel values.

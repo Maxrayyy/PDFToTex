@@ -2,7 +2,7 @@
 
 展示方式：批次、工序、阶段、步骤、表单在左侧分层，类别、对象和属性向右展开。
 父级在其实际所属范围内合并单元格；不同表单即使同名，也不会误合并。
-依赖：Python 3.10+、openpyxl；复制脚本时需保留同目录 common.py 和 temporal.py。
+依赖：Python 3.10+、openpyxl；复制时需保留 common.py、temporal.py、labels_zh.py。
 安装依赖（在本脚本目录执行）：python -m pip install -r requirements.txt
 
 命令行用法（以下示例在本脚本目录执行；其他目录请使用脚本的完整路径）：
@@ -22,7 +22,8 @@ personnel/materials/equipment/environment，每个对象为 {id, name, attribute
 兼容旧版各层 name 包装的数组结构；完整 JSON 示例见同目录 README.md。
 日期显示为 YYYY-MM-DD，带时间时用连字符连接；只有时分时不补秒。
 attributes 使用英文 snake_case 字段，值为文本、数字、布尔值或 null，不支持嵌套数组或对象。
-新属性自动展开为 attribute/value 行，不需要修改字段清单。
+表头、类别和属性名均显示中文；新增属性先在 labels_zh.py 中补充映射。
+缺少中文映射会报错，不猜测翻译，不覆盖已有文件。属性值保持原文。
 仅合并同一表单、同一类别内完全一致的对象；角色或其他属性不同的保留。
 空对象和空表单仍会显示；没有表单的空父级分支不单独增加行。
 不添加表单次序、颜色或装饰样式；仅设置必要换行、列宽、日期格式和层级合并。
@@ -35,22 +36,26 @@ OUTPUT_DIR = None  # 输出目录的绝对路径；None 表示使用输入 JSON 
 from openpyxl import Workbook
 
 from common import CATEGORIES, append, cli, excel_value, flat_schema, forms, layout
+from labels_zh import ATTRIBUTE_LABELS, CATEGORY_LABELS, require_labels, structural_label
 
 
 def build(data):
     flat = flat_schema(data)
+    records = list(forms(data))
+    require_labels(records)
     wb = Workbook()
     ws = wb.active
-    ws.title = 'Hierarchy'
+    ws.title = '步骤聚合层级表'
     rows = [['batch', 'subprocess', 'stage', 'step_id', 'form', 'category', 'id', 'name', 'attribute', 'value'] if flat else ['batch', 'process', 'subprocess', 'step', 'form', 'category', 'name', 'attribute', 'value']]
     identities = []
-    for identity, prefix, form in forms(data):
+    rows[0] = [structural_label(key, flat) for key in rows[0]]
+    for identity, prefix, form in records:
         populated = False
         for ci, category in enumerate(CATEGORIES):
             for oi, obj in enumerate(form[category]):
                 populated = True
                 for key, value in (obj['attributes'].items() or [(None, None)]):
-                    rows.append(prefix + [category] + ([obj['id']] if flat else []) + [obj['name'], key, excel_value(key or '', value)])
+                    rows.append(prefix + [CATEGORY_LABELS[category]] + ([obj['id']] if flat else []) + [obj['name'], ATTRIBUTE_LABELS[key] if key else None, excel_value(key or '', value)])
                     identities.append((0, *identity, ci, oi))
         if not populated:
             rows.append(prefix + [None] * (5 if flat else 4))
@@ -77,7 +82,7 @@ def build(data):
     layout(ws, [25, 42, 34, 16, 38, 15, 16, 48, 38, 66] if flat else [25, 42, 34, 34, 38, 15, 48, 38, 66], merges)
     ws.freeze_panes = 'A2'
     ws.sheet_view.zoomScale = 75
-    return wb, {'Hierarchy': rows}
+    return wb, {ws.title: rows}
 
 
 def main(argv=None):

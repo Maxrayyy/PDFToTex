@@ -34,8 +34,8 @@ def fixture():
                 {'name': 'Person', 'attributes': {'role': 'reviewer'}},
             ], 'materials': [{'name': 'Reagent', 'attributes': {
                 'lot_number': '00123', 'quantity': 0, 'approved': False,
-                'custom_property': '=1+1', 'name': 'secondary',
-                'large_id': 12345678901234567, 'optional': None,
+                'notes': '=1+1', 'name': 'secondary',
+                'code': 12345678901234567, 'brand': None,
             }}], 'equipment': [{'name': 'Device', 'attributes': {}}], 'environment': []},
             {'name': 'same form', 'personnel': [
                 {'name': 'Person', 'attributes': {'role': 'operator', 'date': '2025-09-02'}}
@@ -71,25 +71,31 @@ def test_cli_uses_input_batch_and_does_not_change_json(tmp_path, script, suffix)
     assert all(cell.data_type != 'f' and not cell.font.bold and cell.fill.patternType is None
                for ws in book for row in ws for cell in row)
     assert all('form_order' not in [cell.value for cell in ws[1]] for ws in book)
-    assert all(next(ws.values)[0] == 'batch' for ws in book)
+    assert all('批次' in next(ws.values) for ws in book)
+    assert all(ws.freeze_panes == 'A2' for ws in book)
 
 
 def test_categories_preserve_dynamic_attributes_roles_and_cross_form_occurrences(tmp_path):
     result, _ = run(tmp_path, 'build_workbook.py', fixture())
     assert result.returncode == 0, result.stderr
     book = load_workbook(tmp_path / 'out/B-SECOND_categories.xlsx')
-    assert book.sheetnames == ['personnel', 'materials', 'equipment', 'environment']
-    people = list(book['personnel'].values)
+    assert book.sheetnames == ['步骤总览', '人员明细', '物料明细', '设备明细', '环境明细']
+    overview = list(book['步骤总览'].values)
+    assert len(overview) == 4
+    assert [r[4] for r in overview[1:]] == ['same form', 'same form', 'empty form']
+    assert overview[0][-4:] == ('人员记录数', '物料记录数', '设备记录数', '环境记录数')
+    assert [r[-4:] for r in overview[1:]] == [(2, 1, 1, 0), (1, 0, 0, 0), (0, 0, 0, 0)]
+    people = list(book['人员明细'].values)
     assert len(people) == 4
-    assert [r[people[0].index('role')] for r in people[1:]] == ['operator', 'reviewer', 'operator']
-    material = list(book['materials'].values)
+    assert [r[people[0].index('角色')] for r in people[1:]] == ['operator', 'reviewer', 'operator']
+    material = list(book['物料明细'].values)
     row = dict(zip(material[0], material[1]))
-    assert row['name'] == 'Reagent' and row['attribute_name'] == 'secondary'
-    assert row['custom_property'] == '=1+1' and row['lot_number'] == '00123'
-    assert row['quantity'] == 0 and row['approved'] is False
-    assert row['large_id'] == '12345678901234567'
-    assert book['equipment'].max_row == 2
-    assert book['environment'].max_row == 1
+    assert row['物料名称'] == 'Reagent' and row['名称'] == 'secondary'
+    assert row['备注'] == '=1+1' and row['批号'] == '00123'
+    assert row['数量'] == 0 and row['是否批准'] is False
+    assert row['代码'] == '12345678901234567'
+    assert book['设备明细'].max_row == 2
+    assert book['环境明细'].max_row == 1
 
 
 def test_hierarchy_preserves_empty_objects_and_form_boundaries(tmp_path):
@@ -97,8 +103,10 @@ def test_hierarchy_preserves_empty_objects_and_form_boundaries(tmp_path):
     assert result.returncode == 0, result.stderr
     ws = load_workbook(tmp_path / 'out/B-SECOND_hierarchy.xlsx').active
     rows = expand(ws)
-    assert rows[0] == ['batch', 'process', 'subprocess', 'step', 'form', 'category', 'name', 'attribute', 'value']
-    assert [r[-1] for r in rows if r[-2] == 'role'] == ['operator', 'reviewer', 'operator']
+    assert ws.title == '步骤聚合层级表'
+    assert rows[0] == ['批次', '大工序', '阶段', '步骤', '步骤/表单', '类别', '对象名称', '属性', '值']
+    assert [r[-1] for r in rows if r[-2] == '角色'] == ['operator', 'reviewer', 'operator']
+    assert {r[5] for r in rows[1:]} == {'人员', '物料', '设备', None}
     assert any(r[6] == 'Device' and r[7:] == [None, None] for r in rows[1:])
     assert rows[-1][4] == 'empty form' and rows[-1][5:] == [None] * 4
     forms = [region for region in ws.merged_cells.ranges if region.min_col == 5]
@@ -177,8 +185,8 @@ def test_timestamp_display_keeps_time_including_midnight(tmp_path, script, suffi
     data = fixture()
     obj = data['process'][0]['subprocess'][0]['step'][0]['form'][0]['materials'][0]
     obj['attributes'] = {'production_date': '2026-09-15', 'start_time': '2026-09-15-16:00:05',
-                         'end_time': '2026-09-16-00:00:00', 'minute_time': '2026-09-15-16:01',
-                         'clock_time': '16:02'}
+                         'end_time': '2026-09-16-00:00:00', 'sampling_time': '2026-09-15-16:01',
+                         'time': '16:02'}
     result, _ = run(tmp_path, script, data)
     assert result.returncode == 0, result.stderr
     wb = load_workbook(tmp_path / 'out' / f'B-SECOND_{suffix}.xlsx')
@@ -207,8 +215,39 @@ def test_flat_schema_keeps_step_and_object_ids(tmp_path, script, suffix):
     result, _ = run(tmp_path, script, data)
     assert result.returncode == 0, result.stderr
     wb = load_workbook(tmp_path / 'out' / f'NEW_{suffix}.xlsx')
-    ws = wb['personnel'] if suffix == 'categories' else wb.active
+    ws = wb['人员明细'] if suffix == 'categories' else wb.active
     rows = expand(ws)
-    si, oi = rows[0].index('step_id'), rows[0].index('id')
+    si, oi = rows[0].index('步骤ID'), rows[0].index('记录ID')
     assert [(r[si], r[oi]) for r in rows[1:]] == [('S001', 'O001'), ('S001', 'O002'), ('S002', 'O003')]
-    assert 'subprocess' in rows[0] and 'form_order' not in rows[0]
+    assert '大工序' in rows[0] and '表单序次' not in rows[0]
+    if suffix == 'categories':
+        assert rows[0][:7] == ['记录ID', '步骤ID', '批次', '大工序', '阶段', '步骤/表单', '人员名称']
+        assert list(wb['步骤总览'].values)[1:] == [
+            ('S001', 'NEW', 'Release', None, 'Form', 2, 0, 0, 0),
+            ('S002', 'NEW', 'Release', None, 'Form', 1, 0, 0, 0)]
+
+
+@pytest.mark.parametrize('script', ['build_workbook.py', 'build_hierarchy.py'])
+def test_unmapped_attribute_rejected_without_replacing_output(tmp_path, script):
+    data = fixture()
+    result, _ = run(tmp_path, script, data)
+    assert result.returncode == 0, result.stderr
+    target = next((tmp_path / 'out').glob('*.xlsx'))
+    before = target.read_bytes()
+    data['process'][0]['subprocess'][0]['step'][0]['form'][0]['materials'][0]['attributes']['unmapped_field'] = 'value'
+    result, _ = run(tmp_path, script, data, '--overwrite')
+    assert result.returncode != 0
+    assert 'unmapped_field' in result.stderr and 'labels_zh.py' in result.stderr
+    assert target.read_bytes() == before
+
+
+def test_translated_column_collision_preserves_both_values(tmp_path):
+    data = fixture()
+    data['process'][0]['subprocess'][0]['step'][0]['form'][0]['equipment'][0]['attributes'] = {'equipment_name': 'Other name'}
+    result, _ = run(tmp_path, 'build_workbook.py', data)
+    assert result.returncode == 0, result.stderr
+    wb = load_workbook(tmp_path / 'out/B-SECOND_categories.xlsx')
+    rows = list(wb['设备明细'].values)
+    obj = dict(zip(rows[0], rows[1]))
+    assert obj['设备名称'] == 'Device'
+    assert obj['属性：设备名称'] == 'Other name'
