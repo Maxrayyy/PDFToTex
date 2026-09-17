@@ -1,6 +1,7 @@
 {
   "currency": "USD",
   "tokens_per_unit": 1000000,
+  "source_page_usd": "0.03",
   "source": "用户提供的价格表，2026-09-07；按每百万 token 解释",
   "long_context_above_tokens": 272000,
   "models": {

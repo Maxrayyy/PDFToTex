@@ -7,7 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
-from texopt.monitoring.daily_stats import ZONE, call_summary, completed_jobs, install, poll
+from texopt.monitoring.daily_stats import (ZONE, call_summary, completed_jobs,
+                                           cost_label_with_pages, install, poll)
 from texopt.runtime.pipeline_state import SCHEMA
 
 
@@ -63,6 +64,13 @@ def fixture_job(tmp_path, batch="BATCH1", completed="2026-09-07T02:00:00+00:00")
 
 
 NOW = datetime(2026, 9, 7, 14, tzinfo=ZONE)
+
+
+def test_page_surcharge_is_added_to_partial_model_cost():
+    cost = {"estimated_usd_low": "144.9394", "estimated_usd_high": "144.9394",
+            "priced_calls": 1, "unpriced_calls": 4}
+    assert cost_label_with_pages(cost, 865, {"source_page_usd": "0.03"}) == (
+        "$144.9394（部分） + $25.9500 = $170.8894")
 
 
 @pytest.mark.parametrize("valid_schema", [True, False])

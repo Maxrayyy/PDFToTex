@@ -6,6 +6,7 @@ import argparse
 from collections import defaultdict
 from contextlib import closing
 from datetime import datetime, timedelta
+from decimal import Decimal
 import fcntl
 import hashlib
 import json
@@ -229,12 +230,27 @@ def cell(value):
     return str(value).replace("|", "\\|").replace("\n", " ")
 
 
+def cost_label_with_pages(cost, source_pages, prices):
+    rate = Decimal(str(prices.get("source_page_usd", "0")))
+    if not rate:
+        return cost_label(cost)
+    surcharge = rate * source_pages
+    base = cost_label(cost)
+    if not cost["priced_calls"] and cost["unpriced_calls"]:
+        return f"{base} + ${surcharge:.4f}"
+    low, high = (Decimal(cost[key]) + surcharge
+                 for key in ("estimated_usd_low", "estimated_usd_high"))
+    total = f"${low:.4f}" if low == high else f"${low:.4f} - ${high:.4f}"
+    return f"{base} + ${surcharge:.4f} = {total}"
+
+
 def render_report(rows, checked_at, warnings, unmatched, prices):
     lines = ["# 每日转换统计", "", f"更新时间：{checked_at}", "",
              "按北京时间完成日记账，跨天任务的全部已记录消耗归入完成日；不是 API 当日账单。",
              "转换页数按源 PDF 计，生成页数另列。仅计入已发布 TEX 且有成功编译 PDF 的任务。",
              "Token 为服务端已返回 usage 的已知合计，缺失 usage 不代表零消耗。",
              "费用按用户价格表、美元/百万 token 估算；缓存读取和写入从普通输入中扣除后单独计价。",
+             f"另按源 PDF 页数收取 ${Decimal(str(prices.get('source_page_usd', '0'))):g}/页；费用栏展示模型费用 + 页费 = 合计。",
              ("短/长分界尚未配置，费用显示按短档至长档的估算范围。" if prices.get("long_context_above_tokens") is None
               else f"单次输入超过 {prices['long_context_above_tokens']:,} token 使用长档，否则使用短档。"),
              "未返回缓存明细时暂按零缓存估算；缺失 usage、无结果和未知模型未计价，金额不是完整账单。",
@@ -251,7 +267,7 @@ def render_report(rows, checked_at, warnings, unmatched, prices):
         date = row["date"] + ("（进行中）" if row["provisional"] else "")
         lines.append(f"| {date} | {row['completed_pdfs']} | {row['source_pages']} | {row['pdf_pages']} "
                      f"| {row['input_tokens']:,} | {row['output_tokens']:,} | {row['total_tokens']:,} "
-                     f"| {cost_label(row['cost'])} "
+                     f"| {cost_label_with_pages(row['cost'], row['source_pages'], prices)} "
                      f"| {duration(row['elapsed_seconds'])} | {duration(row['model_seconds'])} "
                      f"| {row['retries']} | {row['missing_usage_calls']} | {row['unmatched_starts']} |")
     for row in rows:
@@ -271,7 +287,7 @@ def render_report(rows, checked_at, warnings, unmatched, prices):
             lines.append(f"| {cell(item['batch'])} | {cell(item['pdf_name'])} "
                          f"| {item['completed_at'][11:19]} | {item['source_pages']} | {item['pdf_pages']} "
                          f"| {item['input_tokens']:,} | {item['output_tokens']:,} | {item['total_tokens']:,} "
-                         f"| {cost_label(item['cost'])} "
+                         f"| {cost_label_with_pages(item['cost'], item['source_pages'], prices)} "
                          f"| {duration(item['elapsed_seconds'])} | {item['retries']} | {'；'.join(gaps) or '无'} |")
         if not row["documents"]:
             lines.append("\n当天尚无符合完成条件的 PDF。")
