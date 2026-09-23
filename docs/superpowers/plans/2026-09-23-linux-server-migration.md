@@ -22,7 +22,9 @@
 - 自动重启冷却 360 秒，每份 PDF 最多 3 次；认证、OOM、编译错误和人工暂停不自动重启。
 - 识别模型、提示词、并发、DPI、费用算法和 TEX 规则在迁移中保持不变。
 - 当前 XeLaTeX 基线为 `TeX Live 2025/dev/Debian`；迁移不同时切换到 TeX Live 2024。
-- 开始完整数据迁移前，`/srv/pdftotex` 可用空间必须不少于 120 GB。
+- 不迁移任何现有 `data/workers/<PDF主干>` 工作区；只迁移 `data/workers/queues`。
+- 不停止或迁移两个本机运行中容器及其工作区；服务器从 canary 和新队列开始建立工作区。
+- 构建开始前 `/srv/pdftotex` 至少保留 35 GB，迁移和构建完成后至少保留 15 GB。
 - 任何真实队列启动后，都必须验证容器、systemd timer 和 `latest.md` 三项状态。
 - 所有 Git 提交使用 `<type>: <中文简述>`，不推送、不改写历史，除非用户明确要求。
 
@@ -474,35 +476,33 @@ git add scripts/package-overleaf-batch.py pipeline/tests/test_overleaf_package.p
 git commit -m "feat: 增加Overleaf批次打包工具"
 ```
 
-### Task 5: 扩容服务器并创建运行用户
+### Task 5: 检查容量并创建运行用户
 
 **Files:**
 - No repository changes.
 
 **Interfaces:**
-- Produces: 容量合格的 `/srv/pdftotex`、8 GB Swap、`pdftotex` 用户和 Docker 权限。
+- Produces: 容量合格的 `/srv/pdftotex`、`pdftotex` 用户和 Docker 权限。
 
-- [ ] **Step 1: 扩容或挂载数据盘**
+- [ ] **Step 1: 检查部署空间**
 
-将至少 200 GB 的 ext4 数据盘挂载到 `/srv/pdftotex`，写入 `/etc/fstab` 后验证：
+创建部署根目录并验证构建前至少有 35 GiB 可用：
 
 ```bash
-findmnt /srv/pdftotex
-test "$(df --output=avail -B1 /srv/pdftotex | tail -1)" -ge 128849018880
+install -d -m 0750 /srv/pdftotex
+test "$(df --output=avail -B1 /srv/pdftotex | tail -1)" -ge 37580963840
 ```
 
-Expected: 挂载存在且可用空间至少 120 GiB。
+Expected: 可用空间至少 35 GiB；低于门槛才扩容或清理无用 BuildKit 缓存。
 
-- [ ] **Step 2: 配置 8 GB Swap**
+- [ ] **Step 2: 检查内存和 Swap**
 
 ```bash
-fallocate -l 8G /swapfile
-chmod 600 /swapfile
-mkswap /swapfile
-swapon /swapfile
-grep -q '^/swapfile ' /etc/fstab || printf '%s\n' '/swapfile none swap sw 0 0' >> /etc/fstab
+free -h
 swapon --show
 ```
+
+14 GiB 内存下先顺序构建。只有发生 OOM 且磁盘仍能保证最终 15 GiB 空闲时，才创建 Swap。
 
 - [ ] **Step 3: 创建专用用户和目录**
 
@@ -582,14 +582,14 @@ ssh "root@${PDFTOTEX_HOST}" \
 
 Expected: 两个文件均为 `600 pdftotex:pdftotex`。
 
-### Task 7: 执行第一阶段数据预同步
+### Task 7: 执行选择性数据同步
 
 **Files:**
 - No repository changes.
 
 **Interfaces:**
 - Consumes: 本机 `Downloads` 和 `data`。
-- Produces: 服务器上可增量更新的完整副本。
+- Produces: 服务器上的输入、正式产物、监控记录和轻量队列记录；不包含历史 worker 工作区。
 
 - [ ] **Step 1: 记录源数据规模和文件数**
 
@@ -597,7 +597,8 @@ Expected: 两个文件均为 `600 pdftotex:pdftotex`。
 cd /Users/dongdong/code/lexiod
 du -sh Downloads data
 find Downloads -type f | wc -l
-find data -type f | wc -l
+find data -path 'data/workers' -prune -o -type f -print | wc -l
+find data/workers/queues -type f | wc -l
 ```
 
 - [ ] **Step 2: 预同步原始 PDF**
@@ -607,14 +608,17 @@ rsync -aH --partial --info=progress2 \
   Downloads/ "root@${PDFTOTEX_HOST}:/srv/pdftotex/Downloads/"
 ```
 
-- [ ] **Step 3: 预同步全部数据**
+- [ ] **Step 3: 同步非 worker 数据和队列记录**
 
 ```bash
-rsync -aH --partial --info=progress2 \
+rsync -aH --partial --info=progress2 --exclude='/workers/***' \
   data/ "root@${PDFTOTEX_HOST}:/srv/pdftotex/data/"
+rsync -aH --partial --info=progress2 \
+  data/workers/queues/ \
+  "root@${PDFTOTEX_HOST}:/srv/pdftotex/data/workers/queues/"
 ```
 
-首次同步不使用 `--delete`，不使用 `-z`。
+首次同步不使用 `--delete`，不使用 `-z`。不得同步 `data/workers/<PDF主干>`，包括 `BP-C3152R_20260806_132157` 和 `BP-C3152R_20260806_131549`。
 
 - [ ] **Step 4: 修正服务器权限并比对规模**
 
@@ -628,11 +632,13 @@ ssh "root@${PDFTOTEX_HOST}" \
 ```bash
 rsync -aHn --itemize-changes Downloads/ \
   "root@${PDFTOTEX_HOST}:/srv/pdftotex/Downloads/"
-rsync -aHn --itemize-changes data/ \
+rsync -aHn --itemize-changes --exclude='/workers/***' data/ \
   "root@${PDFTOTEX_HOST}:/srv/pdftotex/data/"
+rsync -aHn --itemize-changes data/workers/queues/ \
+  "root@${PDFTOTEX_HOST}:/srv/pdftotex/data/workers/queues/"
 ```
 
-Expected: 除迁移期间新产生或更新的文件外无异常差异。
+Expected: 除迁移期间新产生或更新的队列/监控文件外无异常差异；服务器 `data/workers` 下只有 `queues`。
 
 ### Task 8: 转换服务器绝对路径并安装监控
 
