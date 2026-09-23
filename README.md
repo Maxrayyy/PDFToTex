@@ -336,9 +336,12 @@ tail -n 80 ../data/monitoring/realtime/runner.error.log
 Ubuntu 使用 systemd timer。安装器默认从仓库位置推导工作区根目录，也可通过绝对路径显式指定；生成的 unit 会记录解析后的稳定路径：
 
 ```bash
+sudo apt-get install -y acl
 sudo PDFTOTEX_ROOT="$(cd .. && pwd)" ./scripts/install-systemd-monitoring.sh
 systemctl is-active pdftotex-realtime-monitor.timer pdftotex-daily-stats.timer
 ```
+
+安装前需已创建 `pdftotex` 用户。安装器会为 `data/workers` 配置继承 ACL，使该用户能读取容器以 root 身份生成的 SQLite WAL 状态文件。
 
 所有目标均终止且无待执行自动重启时，定时监控自动卸载；以后启动新批次需再次安装。实时 plist 位于数据目录，不会像 `~/Library/LaunchAgents/` 内的文件那样在登录时自动加载。修改间隔需停止再安装，使 launchd 间隔一起更新。休眠或 Docker 暂停会推迟检查。
 

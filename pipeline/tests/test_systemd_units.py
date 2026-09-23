@@ -28,3 +28,12 @@ def test_linux_monitoring_installation_root_is_configurable():
     assert "@PDFTOTEX_ROOT@" in installer
     assert all("@PDFTOTEX_ROOT@" in service for service in services)
     assert all("/srv/pdftotex" not in service for service in services)
+
+
+def test_linux_monitoring_installer_grants_state_database_access():
+    installer = (ROOT / "scripts/install-systemd-monitoring.sh").read_text()
+
+    assert "command -v setfacl" in installer
+    assert 'workers_root="$deployment_root/data/workers"' in installer
+    assert 'u:pdftotex:rwx,d:u:pdftotex:rwx' in installer
+    assert '-type d -name .state -print0' in installer

@@ -15,6 +15,18 @@ if [[ "$deployment_root" != /* ]]; then
   exit 1
 fi
 
+if ! command -v setfacl >/dev/null 2>&1; then
+  printf 'setfacl is required; install the acl package first\n' >&2
+  exit 1
+fi
+
+workers_root="$deployment_root/data/workers"
+install -d -o pdftotex -g pdftotex -m 0750 "$workers_root"
+setfacl -m u:pdftotex:rwx,d:u:pdftotex:rwx "$workers_root"
+while IFS= read -r -d '' state_dir; do
+  setfacl -m u:pdftotex:rwx,d:u:pdftotex:rwx "$state_dir"
+done < <(find "$workers_root" -type d -name .state -print0)
+
 escaped_root="${deployment_root//\\/\\\\}"
 escaped_root="${escaped_root//&/\\&}"
 escaped_root="${escaped_root//|/\\|}"
