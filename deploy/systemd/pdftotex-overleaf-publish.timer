@@ -9,4 +9,3 @@ Unit=pdftotex-overleaf-publish.service
 
 [Install]
 WantedBy=timers.target
-

@@ -12,4 +12,3 @@ Environment=HOME=@PDFTOTEX_ROOT@/overleaf/home
 Environment=GIT_TERMINAL_PROMPT=0
 WorkingDirectory=@PDFTOTEX_ROOT@/PDFToTex
 ExecStart=/usr/bin/python3 @PDFTOTEX_ROOT@/PDFToTex/scripts/publish_completed_overleaf.py --config @PDFTOTEX_ROOT@/overleaf/config.json
-
