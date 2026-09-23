@@ -47,6 +47,30 @@ docker ps -a --filter 'name=pdftotex'
 docker compose run --rm worker
 ```
 
+## 启动批次转译
+
+每次启动或重启批次转译容器后，必须同时启动实时监控。监控会在所有任务结束后自动卸载，不得假定上一批次的监控仍在运行。
+
+```bash
+MONITOR_CONFIG="$(pwd)/../data/monitoring/realtime/config.json"
+MONITOR_SERVICE="gui/$(id -u)/com.lexiod.worker-watch.realtime"
+
+if launchctl print "$MONITOR_SERVICE" >/dev/null 2>&1; then
+  launchctl kickstart -k "$MONITOR_SERVICE"
+else
+  python3 pipeline/texopt/monitoring/worker_watch.py install \
+    --config "$MONITOR_CONFIG"
+fi
+```
+
+批次启动只有在以下条件全部满足后才算完成：
+
+- `docker inspect` 显示批次容器处于 `running`。
+- `launchctl print "$MONITOR_SERVICE"` 能找到实时监控服务。
+- `../data/monitoring/realtime/latest.md` 已刷新，并包含当前容器名。
+
+如果首次监控结果显示容器已退出，应继续检查退出原因和自动重启状态，不得只报告“监控已启动”。
+
 单次监控检查：
 
 ```bash
