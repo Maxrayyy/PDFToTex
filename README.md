@@ -421,9 +421,11 @@ docker compose run --rm --no-deps worker texopt name-fields \
 
 方向检测模型缓存由容器启动时按现有缓存加载；首次运行需要网络访问以完成模型准备。当前未设置单容器内存上限，仍受 Docker Desktop 全局内存和 swap 限制。
 
-## 10. 打包上传 Overleaf
+## 10. 发布到 Overleaf
 
-批次完成并人工确认正式 TEX 后，可将对应批次目录打包为一个 Overleaf 项目：
+### 10.1 ZIP 人工上传
+
+批次完成并人工确认正式 TEX 后，可将对应批次目录打包为一个 Overleaf 上传包：
 
 ```bash
 python3 scripts/package-overleaf-batch.py \
@@ -432,7 +434,50 @@ python3 scripts/package-overleaf-batch.py \
   --outbox ../overleaf/outbox
 ```
 
-输出为 `<批次号>.zip` 和 `<批次号>.zip.sha256`。ZIP 保留批次内的相对路径及 TEX 引用资源，排除 `.pipeline`、`.state`、`.cache`、环境文件、日志和 SQLite 状态。Overleaf Cloud 没有用于无人值守更新现有项目的公开上传 API；没有 Premium Git 时，在网页使用 `New Project -> Upload Project` 上传整个 ZIP。
+输出为 `<批次号>.zip` 和 `<批次号>.zip.sha256`。ZIP 保留批次内的相对路径及 TEX 引用资源，排除 `.pipeline`、`.state`、`.cache`、环境文件、日志和 SQLite 状态。没有 Premium Git 时，在 Overleaf 网页中人工上传 ZIP。
+
+### 10.2 既有项目自动发布
+
+服务器通过 Overleaf Git Integration 直接更新两个仍在使用的既有项目，不经过 GitHub。U2 已全部完成，不启用自动发布。目录映射如下：
+
+| 分类 | 正式产物目录 | Overleaf 项目内目录 |
+| --- | --- | --- |
+| U1 | `data/optimized/U1/批次数据/<批次号>` | `待审核/<批次号>` |
+| U3 | `data/optimized/U3/20260808/<批次号>` | `U3_tex—待审核/20260808/<批次号>` |
+
+安装器从标准输入读取 Git authentication token。token 只写入服务器 `/srv/pdftotex/overleaf/home/.git-credentials`，权限为 `0600`；两个 remote URL、目录映射和自动发布启用时间写入 `/srv/pdftotex/overleaf/config.json`。安装时需要提供两个不含 token 的 Git URL：
+
+```bash
+read -rsp 'Overleaf token: ' OVERLEAF_TOKEN; printf '\n'
+printf '%s\n' "$OVERLEAF_TOKEN" | sudo env \
+  PDFTOTEX_ROOT=/srv/pdftotex \
+  OVERLEAF_GIT_PROXY='http://127.0.0.1:7890' \
+  OVERLEAF_U1_REMOTE='https://git@git.overleaf.com/<U1项目ID>' \
+  OVERLEAF_U3_REMOTE='https://git@git.overleaf.com/<U3项目ID>' \
+  /srv/pdftotex/PDFToTex/scripts/install-overleaf-publisher.sh
+unset OVERLEAF_TOKEN
+```
+
+`OVERLEAF_GIT_PROXY` 只写入 Overleaf 专用 HOME 下的 Git 配置。服务器已运行 Mihomo 时使用 `http://127.0.0.1:7890`，用于稳定首次大项目 clone 和后续 push；不影响主仓库或系统级 Git 配置。
+
+定时任务每两分钟读取 `data/workers/queues/*.status.json`。只有安装后完成、所有任务均为 `done` 且退出码为 `0` 的队列才会自动发布；首次启用不会上传历史批次。同步只替换当前批次文件夹，不删除 Overleaf 项目中的其他目录。发布成功记录在 `/srv/pdftotex/overleaf/publish-ledger.jsonl`，相同内容不会重复提交。
+
+```bash
+systemctl status pdftotex-overleaf-publish.timer
+journalctl -u pdftotex-overleaf-publish.service -n 100 --no-pager
+```
+
+补传或重新发布单个批次时，直接调用单批次发布器：
+
+```bash
+sudo -u pdftotex env HOME=/srv/pdftotex/overleaf/home \
+  python3 /srv/pdftotex/PDFToTex/scripts/overleaf_publish.py \
+  --config /srv/pdftotex/overleaf/config.json \
+  --unit U1 \
+  --batch-dir /srv/pdftotex/data/optimized/U1/批次数据/<批次号>
+```
+
+Overleaf token 到期或撤销后，使用新 token 重新运行安装器。安装器保留原来的 `enabled_after`，不会因为轮换凭据重复上传历史批次。
 
 ## 11. 常见问题与备份
 

@@ -33,15 +33,26 @@ escaped_root="${escaped_root//|/\\|}"
 render_dir="$(mktemp -d)"
 trap 'rm -rf "$render_dir"' EXIT
 
-for source in "$repo_root"/deploy/systemd/pdftotex-*.service; do
+services=(
+  "$repo_root/deploy/systemd/pdftotex-realtime-monitor.service"
+  "$repo_root/deploy/systemd/pdftotex-daily-stats.service"
+)
+timers=(
+  "$repo_root/deploy/systemd/pdftotex-realtime-monitor.timer"
+  "$repo_root/deploy/systemd/pdftotex-daily-stats.timer"
+)
+
+for source in "${services[@]}"; do
   target="$render_dir/$(basename "$source")"
   sed "s|@PDFTOTEX_ROOT@|$escaped_root|g" "$source" > "$target"
   install -m 0644 "$target" "$unit_dir/"
 done
-install -m 0644 "$repo_root"/deploy/systemd/pdftotex-*.timer "$unit_dir/"
+install -m 0644 "${timers[@]}" "$unit_dir/"
 systemd-analyze verify \
-  "$unit_dir"/pdftotex-*.service \
-  "$unit_dir"/pdftotex-*.timer
+  "$unit_dir/pdftotex-realtime-monitor.service" \
+  "$unit_dir/pdftotex-realtime-monitor.timer" \
+  "$unit_dir/pdftotex-daily-stats.service" \
+  "$unit_dir/pdftotex-daily-stats.timer"
 systemctl daemon-reload
 systemctl enable --now \
   pdftotex-realtime-monitor.timer \

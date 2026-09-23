@@ -1,0 +1,15 @@
+[Unit]
+Description=Publish completed PDFToTex batches to Overleaf
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=pdftotex
+Group=pdftotex
+UMask=0077
+Environment=HOME=@PDFTOTEX_ROOT@/overleaf/home
+Environment=GIT_TERMINAL_PROMPT=0
+WorkingDirectory=@PDFTOTEX_ROOT@/PDFToTex
+ExecStart=/usr/bin/python3 @PDFTOTEX_ROOT@/PDFToTex/scripts/publish_completed_overleaf.py --config @PDFTOTEX_ROOT@/overleaf/config.json
+

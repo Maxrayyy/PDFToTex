@@ -10,9 +10,7 @@ from pathlib import Path
 import tempfile
 from zipfile import ZIP_DEFLATED, ZipFile
 
-
-EXCLUDED_DIRS = {".cache", ".pipeline", ".state"}
-EXCLUDED_SUFFIXES = {".db", ".log", ".sqlite", ".sqlite3", ".sqlite3-shm", ".sqlite3-wal"}
+from overleaf_publish import included_files
 
 
 def sha256(path: Path) -> str:
@@ -21,24 +19,6 @@ def sha256(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
-
-
-def included_files(batch: Path) -> list[Path]:
-    files = []
-    for path in sorted(batch.rglob("*")):
-        relative = path.relative_to(batch)
-        if path.is_symlink():
-            raise ValueError(f"symbolic links are not allowed: {relative}")
-        if any(part in EXCLUDED_DIRS for part in relative.parts):
-            continue
-        if path.is_dir():
-            continue
-        if path.name == ".env" or path.suffix == ".env":
-            continue
-        if any(path.name.endswith(suffix) for suffix in EXCLUDED_SUFFIXES):
-            continue
-        files.append(path)
-    return files
 
 
 def package_batch(publish_root: Path, batch_dir: Path, outbox: Path) -> Path:

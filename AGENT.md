@@ -84,6 +84,34 @@ python3 pipeline/texopt/monitoring/worker_watch.py once \\
 cat ../data/monitoring/realtime/latest.md
 ```
 
+## Overleaf 发布
+
+Ubuntu 服务器在成功完成整批队列后，由 `pdftotex-overleaf-publish.timer` 每两分钟自动检查并发布。当前只启用 U1 和 U3：U1 放入项目的 `待审核/<批次号>`，U3 放入 `U3_tex—待审核/20260808/<批次号>`；U2 已完成，不注册到自动发布配置。启动服务器批次时必须同时确认自动发布 timer 和两个监控 timer 均为 `active`：
+
+```bash
+systemctl is-active \
+  pdftotex-overleaf-publish.timer \
+  pdftotex-realtime-monitor.timer \
+  pdftotex-daily-stats.timer
+```
+
+手工补传一个批次：
+
+```bash
+sudo -u pdftotex env HOME=/srv/pdftotex/overleaf/home \
+  python3 /srv/pdftotex/PDFToTex/scripts/overleaf_publish.py \
+  --config /srv/pdftotex/overleaf/config.json \
+  --unit U1 \
+  --batch-dir /srv/pdftotex/data/optimized/U1/批次数据/<批次号>
+```
+
+不得把 Overleaf token 写入仓库、命令参数、remote URL 或日志。token 只允许保存在服务器 `/srv/pdftotex/overleaf/home/.git-credentials`，权限必须为 `0600`。发布异常时查看：
+
+```bash
+journalctl -u pdftotex-overleaf-publish.service -n 100 --no-pager
+tail -n 20 /srv/pdftotex/overleaf/publish-ledger.jsonl
+```
+
 ## 每次优化后的必做验证
 
 任何识别、提示词、表格或 TeX 优化修改，都必须在报告中记录实际结果后才能完成：

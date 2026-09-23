@@ -246,11 +246,11 @@ PDF、图片和压缩缓存已经高度压缩，rsync 不使用 `-z`。传输使
 
 ZIP 保留子目录和被 TEX 引用的资源，不包含 `.pipeline`、模型日志、API 调用记录、缓存数据库或 `.env`。操作者在 Overleaf 使用 `New Project -> Upload Project`，一个 ZIP 创建一个项目。
 
-### 10.2 可选方式：Overleaf Git
+### 10.2 Overleaf Git 自动发布
 
-Premium Git integration 可自动更新已有项目。每个批次项目需要预先创建并记录项目 Git URL；上传器执行 `pull --rebase`、同步批次目录、提交和 push。Git token 只保存在服务器凭据存储中。
+Premium Git integration 自动更新仍在使用的 U1、U3 项目。U1 同步到 `待审核/<批次号>`，U3 同步到 `U3_tex—待审核/20260808/<批次号>`；U2 已全部完成，不启用自动发布。上传器执行 `pull --rebase`、只替换当前批次目录、提交和 push；Git token 只保存在服务器权限 `0600` 的凭据文件中。
 
-Overleaf Cloud 没有用于无人值守更新已有项目的公开上传 API，因此没有 Premium Git 时保留人工上传 ZIP 的最后一步。
+systemd timer 每两分钟扫描安装后新完成的队列，只有整批成功才发布。首次启用不补传历史批次，失败不写成功账本并在下一轮重试。Overleaf Cloud 没有用于无人值守更新已有项目的公开上传 API，因此没有 Premium Git 时保留人工上传 ZIP 的最后一步。
 
 ## 11. 故障处理与回滚
 
