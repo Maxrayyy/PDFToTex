@@ -33,6 +33,7 @@ RUN python -m pip install pytest pytest-asyncio
 COPY Lexoid/tests /tests/lexoid
 COPY pipeline /tests/pipeline
 COPY deploy /tests/deploy
+COPY scripts /tests/scripts
 COPY pipeline/texopt/model_prices.json /tests/pipeline/tests/unit/model_prices.json
 ENV PYTHONPATH=/tests/pipeline
 RUN ln -sf /src/texopt/optimization/cli.py /tests/pipeline/tests/unit/cli.py \

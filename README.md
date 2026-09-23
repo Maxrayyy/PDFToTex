@@ -401,7 +401,20 @@ docker compose run --rm --no-deps worker texopt name-fields \
 
 方向检测模型缓存由容器启动时按现有缓存加载；首次运行需要网络访问以完成模型准备。当前未设置单容器内存上限，仍受 Docker Desktop 全局内存和 swap 限制。
 
-## 10. 常见问题与备份
+## 10. 打包上传 Overleaf
+
+批次完成并人工确认正式 TEX 后，可将对应批次目录打包为一个 Overleaf 项目：
+
+```bash
+python3 scripts/package-overleaf-batch.py \
+  --publish-root ../data/optimized \
+  --batch-dir ../data/optimized/<相对批次目录> \
+  --outbox ../overleaf/outbox
+```
+
+输出为 `<批次号>.zip` 和 `<批次号>.zip.sha256`。ZIP 保留批次内的相对路径及 TEX 引用资源，排除 `.pipeline`、`.state`、`.cache`、环境文件、日志和 SQLite 状态。Overleaf Cloud 没有用于无人值守更新现有项目的公开上传 API；没有 Premium Git 时，在网页使用 `New Project -> Upload Project` 上传整个 ZIP。
+
+## 11. 常见问题与备份
 
 | 现象 | 排查与处理 |
 | --- | --- |
