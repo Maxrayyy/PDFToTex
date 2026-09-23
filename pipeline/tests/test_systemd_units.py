@@ -15,6 +15,7 @@ def test_linux_monitoring_units_use_once_and_expected_intervals():
     assert "daily_stats.py once" in daily
     assert "OnUnitActiveSec=600s" in daily_timer
     assert "--scheduled" not in realtime
+    assert "EnvironmentFile=-@PDFTOTEX_ROOT@/data/monitoring/realtime/email.env" in realtime
 
 
 def test_linux_monitoring_installation_root_is_configurable():
@@ -37,6 +38,9 @@ def test_linux_monitoring_installer_grants_state_database_access():
     assert 'workers_root="$deployment_root/data/workers"' in installer
     assert 'u:pdftotex:rwx,d:u:pdftotex:rwx' in installer
     assert '-type d -name .state -print0' in installer
+    assert 'email_env="$deployment_root/data/monitoring/realtime/email.env"' in installer
+    assert 'chmod 0600 "$email_env"' in installer
+    assert 'chown root:root "$email_env"' in installer
 
 
 def test_overleaf_publisher_runs_as_pdftotex_every_two_minutes():

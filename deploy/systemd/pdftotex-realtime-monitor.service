@@ -9,5 +9,6 @@ User=pdftotex
 Group=pdftotex
 WorkingDirectory=@PDFTOTEX_ROOT@/PDFToTex
 Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-@PDFTOTEX_ROOT@/data/monitoring/realtime/email.env
 ExecStart=/usr/bin/python3 @PDFTOTEX_ROOT@/PDFToTex/pipeline/texopt/monitoring/worker_watch.py once --config @PDFTOTEX_ROOT@/data/monitoring/realtime/config.json
 UMask=0027

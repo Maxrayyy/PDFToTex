@@ -27,6 +27,12 @@ while IFS= read -r -d '' state_dir; do
   setfacl -m u:pdftotex:rwx,d:u:pdftotex:rwx "$state_dir"
 done < <(find "$workers_root" -type d -name .state -print0)
 
+email_env="$deployment_root/data/monitoring/realtime/email.env"
+if [[ -f "$email_env" ]]; then
+  chown root:root "$email_env"
+  chmod 0600 "$email_env"
+fi
+
 escaped_root="${deployment_root//\\/\\\\}"
 escaped_root="${escaped_root//&/\\&}"
 escaped_root="${escaped_root//|/\\|}"

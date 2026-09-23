@@ -357,6 +357,15 @@ systemctl is-active pdftotex-realtime-monitor.timer pdftotex-daily-stats.timer
   "output_dir": "/absolute/path/to/pdftotex-workspace/data/monitoring/realtime",
   "queue_dir": "/absolute/path/to/pdftotex-workspace/data/workers/queues",
   "auto_restart": {"enabled": true, "cooldown_seconds": 360, "max_attempts": 3},
+  "email_alerts": {
+    "enabled": true,
+    "smtp_host": "smtp.example.com",
+    "smtp_port": 465,
+    "sender": "alerts@example.com",
+    "recipient": "operator@example.com",
+    "password_env": "PDFTOTEX_SMTP_PASSWORD",
+    "retry_seconds": 600
+  },
   "containers": [{
     "name": "lexiod-new-batch", "stem": "example", "pages": 10,
     "work_root": "/absolute/path/to/pdftotex-workspace/data/workers/example",
@@ -368,6 +377,16 @@ systemctl is-active pdftotex-realtime-monitor.timer pdftotex-daily-stats.timer
 读取日志本身不调用模型，但启用自动重启后恢复转换会继续调用模型。当前策略每份 PDF 最多自动重启 3 次，冷却至少 360 秒，实际尝试还要等待下一次轮询。
 
 自动重启只针对退出码 1、当前任务因临时模型服务故障明确暂停、且日志与本次运行时间匹配的容器。认证/权限错误、OOM、普通编译失败或已删除容器不会自动重启。维护时可设置 `auto_restart.enabled=false`。
+
+邮件告警在非 API 异常退出（包括 OOM、编译失败和异常退出码）时立即发送；临时 API 错误会先自动重启，达到 `max_attempts` 后再次退出才发送。邮件包含容器和 PDF、阶段、退出码、OOM 状态、API/HTTP 错误、队列状态、阶段日志与 Docker 日志尾部。同一运行实例的同类告警只发送一次，SMTP 失败按 `retry_seconds` 重试。
+
+Ubuntu 将 SMTP 密码单独写入 `data/monitoring/realtime/email.env`，不得写入 JSON、仓库或 systemd unit：
+
+```bash
+PDFTOTEX_SMTP_PASSWORD=your-smtp-authorization-code
+```
+
+`pdftotex-realtime-monitor.service` 通过 `EnvironmentFile` 读取该文件；文件必须属于 `root:root` 且权限为 `0600`。重新运行 `scripts/install-systemd-monitoring.sh` 会校正权限并更新 systemd unit。
 
 可选 `recover_publish_from` 用于已知发布路径错误：仅在正常退出、manifest 完成、原文件/工作文件/记录的 SHA-256 一致时归位文件，不覆盖已存在的目标。
 

@@ -701,6 +701,7 @@ syntax_repair（失败回退） → optimize（失败回退到 pre-annotation so
 - **输入**：工作区日志、队列状态、Docker 状态
 - **输出**：`latest.md`（检测表格、PDF 清单、阶段进度、异常提示）、`latest.json`（完整结构化快照）
 - **自动重启**：最多 3 次，冷却 360 秒，仅针对模型服务故障
+- **邮件告警**：非 API 异常退出立即发送；临时 API 错误重启达到上限后发送，告警按运行实例去重
 
 ### 日报（`daily_stats.py`）
 

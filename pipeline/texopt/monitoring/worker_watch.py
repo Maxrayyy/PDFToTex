@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import argparse
-from collections import Counter
+from collections import Counter, deque
 from datetime import datetime
+from email.message import EmailMessage
 import fcntl
 import hashlib
 import json
@@ -12,6 +13,8 @@ import os
 from pathlib import Path
 import plistlib
 import re
+import smtplib
+import ssl
 import sqlite3
 import subprocess
 import sys
@@ -494,6 +497,155 @@ def auto_restart(target, result, saved, policy, docker, now, persist):
         detail["restart_error_type"] = type(exc).__name__
 
 
+def redact_sensitive(text):
+    text = re.sub(r"(?i)(authorization\s*[:=]\s*(?:bearer\s+)?)[^\s,;]+",
+                  r"\1[REDACTED]", text)
+    text = re.sub(r"\b(?:sk-|olp_)[A-Za-z0-9._-]{8,}", "[REDACTED]", text)
+    return text
+
+
+def _tail(path, lines=80, limit=12000):
+    try:
+        with Path(path).open(encoding="utf-8", errors="replace") as stream:
+            content = "".join(deque(stream, maxlen=lines))
+    except OSError as exc:
+        return f"读取失败：{type(exc).__name__}"
+    return redact_sensitive(content[-limit:])
+
+
+def docker_log_tail(docker, container, lines=100):
+    try:
+        completed = subprocess.run(
+            [docker, "logs", "--tail", str(lines), container], capture_output=True,
+            text=True, timeout=20,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return f"Docker 日志读取失败：{type(exc).__name__}"
+    content = "\n".join(part.strip() for part in (completed.stdout, completed.stderr)
+                         if part.strip())
+    if not content:
+        content = f"Docker 日志为空（命令退出码 {completed.returncode}）"
+    return redact_sensitive(content[-20000:])
+
+
+def failure_alert_kind(result):
+    restart = result.get("auto_restart")
+    if restart:
+        return "api_retry_exhausted" if restart.get("status") == "limit_reached" else None
+    if result.get("status") not in ("exited", "dead"):
+        return None
+    alerts = set(result.get("alerts", []))
+    if "oom_killed" in alerts:
+        return "oom_exit"
+    if alerts & {"container_failed", "missing_published_tex", "invalid_published_tex"}:
+        return "non_api_exit"
+    return None
+
+
+def build_failure_email(target, result, kind, docker, now):
+    labels = {
+        "oom_exit": "OOM 内存不足退出",
+        "non_api_exit": "非 API 异常退出",
+        "api_retry_exhausted": "API 重启失败",
+    }
+    label = labels[kind]
+    restart = result.get("auto_restart", {})
+    summary = [
+        f"告警时间: {datetime.fromtimestamp(now).astimezone().isoformat(timespec='seconds')}",
+        f"告警类型: {label}",
+        f"容器: {target['name']}",
+        f"当前 PDF: {target['stem']}",
+        f"流水线阶段: {result.get('stage', 'unknown')}",
+        f"容器状态: {result.get('status', 'unknown')}",
+        f"退出码: {result.get('exit_code', 'unknown')}",
+        f"OOMKilled: {'是' if 'oom_killed' in result.get('alerts', []) else '否'}",
+        f"启动时间: {result.get('started_at', 'unknown')}",
+        f"退出时间: {result.get('finished_at', 'unknown')}",
+    ]
+    if restart:
+        summary.extend([
+            f"重启次数: {restart.get('attempts', 0)}/{restart.get('max_attempts', 0)}",
+            f"API 错误: {restart.get('error_type', 'unknown')}",
+            f"HTTP 状态: {restart.get('http_status', 'unknown')}",
+            f"错误页码: {restart.get('page', 'unknown')}",
+        ])
+    summary.append("\n监控错误详情:\n" + json.dumps({
+        "alerts": result.get("alerts", []),
+        "issues": result.get("issues", []),
+        "new_counts": result.get("new_counts", {}),
+        "queue": result.get("queue"),
+    }, ensure_ascii=False, indent=2))
+
+    logs = Path(target["work_root"]) / ".pipeline" / target["stem"]
+    sections = []
+    for path in sorted(logs.glob("*.process.log")) + sorted(logs.glob("*.process.calls.jsonl")):
+        sections.append(f"\n===== {path}（末尾） =====\n{_tail(path)}")
+    sections.append(
+        f"\n===== docker logs {target['name']}（末尾） =====\n"
+        f"{docker_log_tail(docker, target['name'])}"
+    )
+    summary_text = redact_sensitive("\n".join(summary))
+    diagnostic_text = redact_sensitive("\n".join(sections))
+    remaining = max(0, 60000 - len(summary_text) - 2)
+    body = summary_text + "\n\n" + diagnostic_text[-remaining:]
+    return f"[PDFToTex告警] {target['name']} {label}", body
+
+
+def send_email_message(settings, subject, body):
+    password_env = settings.get("password_env", "PDFTOTEX_SMTP_PASSWORD")
+    password = os.environ.get(password_env)
+    if not password:
+        raise ValueError(f"missing SMTP password environment: {password_env}")
+    sender = settings["sender"]
+    recipient = settings["recipient"]
+    message = EmailMessage()
+    message["From"] = sender
+    message["To"] = recipient
+    message["Subject"] = subject
+    message.set_content(body)
+    context = ssl.create_default_context()
+    with smtplib.SMTP_SSL(settings["smtp_host"], int(settings.get("smtp_port", 465)),
+                           timeout=int(settings.get("timeout_seconds", 30)),
+                           context=context) as client:
+        client.login(settings.get("username", sender), password)
+        client.send_message(message)
+
+
+def process_email_alert(target, result, saved, settings, docker, now, *,
+                        mailer=send_email_message, persist=lambda: None):
+    if not settings.get("enabled"):
+        return
+    kind = failure_alert_kind(result)
+    if kind is None:
+        return
+    fingerprint = "|".join(str(value) for value in (
+        kind, result.get("container_id"), result.get("finished_at"), target["stem"]
+    ))
+    record = saved.setdefault("email_alert", {})
+    detail = {"kind": kind, "fingerprint": fingerprint}
+    result["email_alert"] = detail
+    if record.get("fingerprint") == fingerprint and record.get("status") == "sent":
+        detail["status"] = "already_sent"
+        return
+    retry_seconds = max(60, int(settings.get("retry_seconds", 600)))
+    if (record.get("fingerprint") == fingerprint and record.get("status") == "send_failed"
+            and now < record.get("last_attempt_at", 0) + retry_seconds):
+        detail.update(status="retry_waiting",
+                      retry_after_seconds=max(1, int(record["last_attempt_at"] + retry_seconds - now)))
+        return
+    record.update(fingerprint=fingerprint, kind=kind, status="sending", last_attempt_at=now)
+    persist()
+    try:
+        subject, body = build_failure_email(target, result, kind, docker, now)
+        mailer(settings, subject, body)
+        record.update(status="sent", sent_at=now)
+        detail["status"] = "sent"
+    except (OSError, ValueError, KeyError, smtplib.SMTPException) as exc:
+        record.update(status="send_failed", error_type=type(exc).__name__)
+        detail.update(status="send_failed", error_type=type(exc).__name__)
+    persist()
+
+
 def queue_progress(directory, name):
     matches = []
     for path in sorted(Path(directory).glob("*.status.json")):
@@ -578,6 +730,12 @@ def render_report(snapshot):
             notes.append(f"- {item['name']}：{actions.get(restart['status'], restart['status'])}；"
                          f"当前 PDF 自动重启 {restart['attempts']}/{restart['max_attempts']} 次；"
                          f"原因 {restart['error_type']}，源第 {restart['page']} 页")
+        email = item.get("email_alert")
+        if email:
+            email_status = {"sent": "告警邮件已发送", "already_sent": "告警邮件已发送过",
+                            "send_failed": "告警邮件发送失败，将自动重试",
+                            "retry_waiting": "等待重试告警邮件"}
+            notes.append(f"- {item['name']}：{email_status.get(email['status'], email['status'])}")
         for issue in item["issues"]:
             detail = issue.get("error_type") or issue.get("code") or issue.get("event", "未知")
             notes.append(f"- {item['name']}：{detail}，页码 {issue.get('page', '未知')}")
@@ -617,6 +775,12 @@ def poll(config):
                          lambda: atomic_write(state_path, json.dumps(saved, ensure_ascii=False, indent=2)))
             if config.get("queue_dir"):
                 result["queue"] = queue_progress(config["queue_dir"], target["name"])
+            process_email_alert(
+                target, result, target_state, config.get("email_alerts", {}),
+                config["docker"], now,
+                persist=lambda: atomic_write(
+                    state_path, json.dumps(saved, ensure_ascii=False, indent=2)),
+            )
             containers.append(result)
         pending_queue = any(
             any(not job.get("completed", job.get("status") == "done")
