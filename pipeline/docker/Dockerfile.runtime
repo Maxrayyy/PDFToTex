@@ -3,6 +3,8 @@ FROM ${BASE_IMAGE}
 
 ARG PIP_INDEX_URL=https://pypi.org/simple
 ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu
+ARG APT_MIRROR=http://deb.debian.org/debian
+ARG APT_SECURITY_MIRROR=http://deb.debian.org/debian-security
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -14,7 +16,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True \
     PADDLE_HOME=/root/.paddle
 
-RUN apt-get update \
+RUN sed -i \
+        -e "s|http://deb.debian.org/debian-security|${APT_SECURITY_MIRROR}|g" \
+        -e "s|http://deb.debian.org/debian|${APT_MIRROR}|g" \
+        /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
         curl \

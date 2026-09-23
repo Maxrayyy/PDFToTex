@@ -201,6 +201,15 @@ docker compose run --rm --no-deps worker texopt-pipeline --help
 
 统一脚本只允许在 x86_64 Docker 主机执行，依次构建 `pdftotex-runtime:local`、`pdftotex:local` 和 `pdftotex-test:local`，运行完整容器测试，并额外生成带 Git SHA 的不可变标签。镜像和依赖版本清单写入 `../data/audits/images/<git-sha>.txt`。构建需要网络下载依赖；测试服务禁用网络。构建不会更新已经运行的容器。
 
+网络较慢的服务器可只对本次构建指定镜像源，不修改 Dockerfile 默认值：
+
+```bash
+APT_MIRROR=https://mirrors.aliyun.com/debian \
+APT_SECURITY_MIRROR=https://mirrors.aliyun.com/debian-security \
+PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple \
+./scripts/build-images.sh
+```
+
 ### 5.2 当前推荐：指定批次队列
 
 入口是主仓库的 [scripts/run-sequential-queue.py](scripts/run-sequential-queue.py)，容器内路径为 `/opt/pdftotex/run-sequential-queue.py`。
