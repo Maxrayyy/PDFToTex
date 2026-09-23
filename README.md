@@ -41,7 +41,8 @@ git submodule status
 除特别注明外，以下命令都从本目录执行：
 
 ```bash
-cd /Users/dongdong/code/lexiod/PDFToTex
+export PDFTOTEX_WORKSPACE=/absolute/path/to/pdftotex-workspace
+cd "$PDFTOTEX_WORKSPACE/PDFToTex"
 ```
 
 子仓库内还有其他 Compose 文件，分别服务于独立组件或旧流程。当前转换任务使用本目录的 Compose，服务名为 `worker`、`tests`。
@@ -220,7 +221,7 @@ PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple \
 {
   "container": "lexiod-new-batch",
   "monitor_config": "/data/monitoring/realtime/config.json",
-  "host_data": "/Users/dongdong/code/lexiod/data",
+  "host_data": "/absolute/path/to/pdftotex-workspace/data",
   "sources": ["/input/U1/批次数据/NEW_BATCH/example.pdf"]
 }
 ```
@@ -332,6 +333,13 @@ python3 pipeline/texopt/monitoring/worker_watch.py stop \
 tail -n 80 ../data/monitoring/realtime/runner.error.log
 ```
 
+Ubuntu 使用 systemd timer。安装器默认从仓库位置推导工作区根目录，也可通过绝对路径显式指定；生成的 unit 会记录解析后的稳定路径：
+
+```bash
+sudo PDFTOTEX_ROOT="$(cd .. && pwd)" ./scripts/install-systemd-monitoring.sh
+systemctl is-active pdftotex-realtime-monitor.timer pdftotex-daily-stats.timer
+```
+
 所有目标均终止且无待执行自动重启时，定时监控自动卸载；以后启动新批次需再次安装。实时 plist 位于数据目录，不会像 `~/Library/LaunchAgents/` 内的文件那样在登录时自动加载。修改间隔需停止再安装，使 launchd 间隔一起更新。休眠或 Docker 暂停会推迟检查。
 
 ### 7.3 配置与自动恢复
@@ -342,14 +350,14 @@ tail -n 80 ../data/monitoring/realtime/runner.error.log
 {
   "launchd_label": "com.lexiod.worker-watch.realtime",
   "interval_seconds": 360,
-  "docker": "/Users/dongdong/.docker/bin/docker",
-  "output_dir": "/Users/dongdong/code/lexiod/data/monitoring/realtime",
-  "queue_dir": "/Users/dongdong/code/lexiod/data/workers/queues",
+  "docker": "/absolute/path/to/docker",
+  "output_dir": "/absolute/path/to/pdftotex-workspace/data/monitoring/realtime",
+  "queue_dir": "/absolute/path/to/pdftotex-workspace/data/workers/queues",
   "auto_restart": {"enabled": true, "cooldown_seconds": 360, "max_attempts": 3},
   "containers": [{
     "name": "lexiod-new-batch", "stem": "example", "pages": 10,
-    "work_root": "/Users/dongdong/code/lexiod/data/workers/example",
-    "output_tex": "/Users/dongdong/code/lexiod/data/optimized/U1/批次数据/NEW_BATCH/example.tex"
+    "work_root": "/absolute/path/to/pdftotex-workspace/data/workers/example",
+    "output_tex": "/absolute/path/to/pdftotex-workspace/data/optimized/example-batch/example.tex"
   }]
 }
 ```

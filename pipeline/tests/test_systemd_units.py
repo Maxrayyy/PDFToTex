@@ -15,3 +15,16 @@ def test_linux_monitoring_units_use_once_and_expected_intervals():
     assert "daily_stats.py once" in daily
     assert "OnUnitActiveSec=600s" in daily_timer
     assert "--scheduled" not in realtime
+
+
+def test_linux_monitoring_installation_root_is_configurable():
+    installer = (ROOT / "scripts/install-systemd-monitoring.sh").read_text()
+    services = [
+        (ROOT / "deploy/systemd/pdftotex-realtime-monitor.service").read_text(),
+        (ROOT / "deploy/systemd/pdftotex-daily-stats.service").read_text(),
+    ]
+
+    assert "PDFTOTEX_ROOT" in installer
+    assert "@PDFTOTEX_ROOT@" in installer
+    assert all("@PDFTOTEX_ROOT@" in service for service in services)
+    assert all("/srv/pdftotex" not in service for service in services)

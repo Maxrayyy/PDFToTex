@@ -1,13 +1,13 @@
 [Unit]
 Description=PDFToTex realtime worker monitor
 After=docker.service
-ConditionPathExists=/srv/pdftotex/data/monitoring/realtime/config.json
+ConditionPathExists=@PDFTOTEX_ROOT@/data/monitoring/realtime/config.json
 
 [Service]
 Type=oneshot
 User=pdftotex
 Group=pdftotex
-WorkingDirectory=/srv/pdftotex/PDFToTex
+WorkingDirectory=@PDFTOTEX_ROOT@/PDFToTex
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 /srv/pdftotex/PDFToTex/pipeline/texopt/monitoring/worker_watch.py once --config /srv/pdftotex/data/monitoring/realtime/config.json
+ExecStart=/usr/bin/python3 @PDFTOTEX_ROOT@/PDFToTex/pipeline/texopt/monitoring/worker_watch.py once --config @PDFTOTEX_ROOT@/data/monitoring/realtime/config.json
 UMask=0027

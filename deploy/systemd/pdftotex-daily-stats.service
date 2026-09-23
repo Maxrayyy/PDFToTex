@@ -1,12 +1,12 @@
 [Unit]
 Description=PDFToTex daily statistics update
-ConditionPathExists=/srv/pdftotex/data/monitoring/daily/config.json
+ConditionPathExists=@PDFTOTEX_ROOT@/data/monitoring/daily/config.json
 
 [Service]
 Type=oneshot
 User=pdftotex
 Group=pdftotex
-WorkingDirectory=/srv/pdftotex/PDFToTex
+WorkingDirectory=@PDFTOTEX_ROOT@/PDFToTex
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 /srv/pdftotex/PDFToTex/pipeline/texopt/monitoring/daily_stats.py once --config /srv/pdftotex/data/monitoring/daily/config.json
+ExecStart=/usr/bin/python3 @PDFTOTEX_ROOT@/PDFToTex/pipeline/texopt/monitoring/daily_stats.py once --config @PDFTOTEX_ROOT@/data/monitoring/daily/config.json
 UMask=0027
