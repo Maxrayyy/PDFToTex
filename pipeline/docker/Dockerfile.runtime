@@ -39,7 +39,9 @@ RUN python -m venv /opt/venv \
 
 WORKDIR /src/Lexoid
 COPY Lexoid/pyproject.toml Lexoid/poetry.lock Lexoid/README.md ./
-RUN pip install poetry poetry-plugin-export \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    unset PIP_NO_CACHE_DIR \
+    && pip install poetry poetry-plugin-export \
     && poetry export --only main --without-hashes -f requirements.txt -o /tmp/requirements.txt \
     && sed -i '/^\(cuda-bindings\|cuda-toolkit\|nvidia-[a-z0-9-]*\|torch\|triton\)==/d' /tmp/requirements.txt \
     && pip install -r /tmp/requirements.txt \
