@@ -81,7 +81,7 @@ class Config:
                 "--start-page {start_page}",
             ),
             lexoid_model=os.environ.get("LEXOID_MODEL", ""),
-            lexoid_timeout_seconds=int(os.environ.get("LEXOID_TIMEOUT_SECONDS", "7200")),
+            lexoid_timeout_seconds=int(os.environ.get("LEXOID_TIMEOUT_SECONDS", "43200")),
             optimizer_command=os.environ.get("OPTIMIZER_COMMAND", "texopt"),
             optimizer_extra_args=os.environ.get(
                 "OPTIMIZER_EXTRA_ARGS", "--llm-repair-on-failure --compile-check"

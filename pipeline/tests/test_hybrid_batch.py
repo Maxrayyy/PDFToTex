@@ -58,6 +58,9 @@ def test_batch_defaults_to_vision_and_can_explicitly_select_paddle(tmp_path, mon
 
 
 def test_stage_timeout_can_accommodate_large_documents(monkeypatch):
+    monkeypatch.delenv("PIPELINE_STAGE_TIMEOUT_SECONDS", raising=False)
+    assert BatchConfig().timeout == 43200
+    assert BatchConfig.from_env().timeout == 43200
     monkeypatch.setenv("PIPELINE_STAGE_TIMEOUT_SECONDS", "21600")
     assert BatchConfig.from_env().timeout == 21600
     monkeypatch.setenv("PIPELINE_STAGE_TIMEOUT_SECONDS", "0")

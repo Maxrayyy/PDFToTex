@@ -22,7 +22,9 @@ class PipelineStateTests(unittest.TestCase):
         from unittest.mock import patch
 
         with patch.dict("os.environ", {}, clear=True):
-            self.assertEqual(Config.from_env().max_attempts, 3)
+            config = Config.from_env()
+            self.assertEqual(config.max_attempts, 3)
+            self.assertEqual(config.lexoid_timeout_seconds, 43200)
 
     def test_json_stage_flag_is_strict_and_defaults_off(self) -> None:
         from unittest.mock import patch

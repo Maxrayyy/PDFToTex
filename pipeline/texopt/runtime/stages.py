@@ -52,7 +52,7 @@ class BatchConfig:
     vision_concurrency: int = 4
     reconcile_concurrency: int = 2
     optimizer_version: str = "texopt-layout-v11-outline-field-safe"
-    timeout: int = 7200
+    timeout: int = 43200
     publish_root: str | None = None
 
     def __post_init__(self):
@@ -72,7 +72,7 @@ class BatchConfig:
             retry_dpi=int(os.getenv("RETRY_DPI", "480")),
             vision_concurrency=int(os.getenv("VISION_CONCURRENCY", "4")),
             reconcile_concurrency=int(os.getenv("RECONCILE_CONCURRENCY", "2")),
-            timeout=int(os.getenv("PIPELINE_STAGE_TIMEOUT_SECONDS", "7200")),
+            timeout=int(os.getenv("PIPELINE_STAGE_TIMEOUT_SECONDS", "43200")),
             publish_root=os.getenv("PIPELINE_PUBLISH_ROOT") or None,
         )
 

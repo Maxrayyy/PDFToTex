@@ -182,7 +182,7 @@ TEXOPT_SEMANTIC_NAMING=deferred
 | `RENDER_DPI` / `RETRY_DPI` | 默认 `240` / `480` |
 | `VISION_CONCURRENCY` | Compose 默认 `4`，当前队列必须显式设置为 `2` |
 | `RECONCILE_CONCURRENCY` | 默认 `2` |
-| `PIPELINE_STAGE_TIMEOUT_SECONDS` | Compose 默认 `43200` 秒，按阶段计算 |
+| `PIPELINE_STAGE_TIMEOUT_SECONDS` | 代码与 Compose 默认均为 `43200` 秒，按阶段计算 |
 | `PDF_SOURCE_ROOT` | 通用扫描输入根目录，默认 `/input` |
 | `PIPELINE_OUTPUT_ROOT` | 通用扫描工作根目录，默认 `/data` |
 | `PIPELINE_PUBLISH_ROOT` | 正式 TEX 根目录，队列模式设置到当前批次 |
