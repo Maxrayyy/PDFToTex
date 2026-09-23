@@ -1,6 +1,17 @@
 name: pdftotex
 
 services:
+  runtime:
+    build:
+      context: .
+      dockerfile: pipeline/docker/Dockerfile.runtime
+      args:
+        BASE_IMAGE: ${RUNTIME_BASE_IMAGE:-python:3.10.21-slim-trixie}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        TORCH_INDEX_URL: ${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cpu}
+    image: pdftotex-runtime:local
+    profiles: ["build"]
+
   worker:
     build:
       context: .

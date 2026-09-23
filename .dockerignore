@@ -1,11 +1,13 @@
 **/.git
 **/.env
-**/.venv
+**/.venv*
 **/__pycache__
 **/.pytest_cache
 **/*.pdf
 **/*.ipynb
 **/data
+data
+Downloads
 **/codex-repairs
 **/examples
 **/*.aux

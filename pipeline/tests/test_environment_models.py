@@ -1,3 +1,6 @@
+import importlib.util
+import shutil
+
 import pytest
 
 from texopt.recognition.lexoid_job import new_job
@@ -5,6 +8,14 @@ from texopt.optimization.llm import LLMBatchNamer
 from texopt.optimization.reconcile import FieldReconcileAdapter
 from texopt.runtime.stages import BatchConfig, build_stage_commands
 from texopt.optimization.syntax_repair import LLMSyntaxRepairer
+
+
+def test_runtime_has_required_document_toolchain():
+    assert importlib.util.find_spec("paddle") is not None
+    assert importlib.util.find_spec("paddleocr") is not None
+    assert importlib.util.find_spec("pypdfium2") is not None
+    assert shutil.which("xelatex")
+    assert shutil.which("pdftoppm")
 
 
 def test_batch_resolves_each_model_at_construction(tmp_path, monkeypatch):

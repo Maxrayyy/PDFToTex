@@ -1,0 +1,45 @@
+ARG BASE_IMAGE=python:3.10.21-slim-trixie
+FROM ${BASE_IMAGE}
+
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DEFAULT_TIMEOUT=120 \
+    PIP_INDEX_URL=${PIP_INDEX_URL} \
+    VIRTUAL_ENV=/opt/venv \
+    PATH=/opt/venv/bin:$PATH \
+    PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True \
+    PADDLE_HOME=/root/.paddle
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        curl \
+        git \
+        libgl1 \
+        libglib2.0-0 \
+        poppler-utils \
+        texlive-lang-chinese \
+        texlive-latex-extra \
+        texlive-xetex \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python -m venv /opt/venv \
+    && pip install --upgrade pip setuptools wheel \
+    && pip install --index-url "${TORCH_INDEX_URL}" torch
+
+WORKDIR /src/Lexoid
+COPY Lexoid/pyproject.toml Lexoid/poetry.lock Lexoid/README.md ./
+RUN pip install poetry poetry-plugin-export \
+    && poetry export --only main --without-hashes -f requirements.txt -o /tmp/requirements.txt \
+    && sed -i '/^\(cuda-bindings\|cuda-toolkit\|nvidia-[a-z0-9-]*\|torch\|triton\)==/d' /tmp/requirements.txt \
+    && pip install -r /tmp/requirements.txt \
+    && playwright install --with-deps --only-shell chromium \
+    && pip uninstall -y poetry poetry-plugin-export \
+    && rm -f /tmp/requirements.txt \
+    && pip check
+
+WORKDIR /data
