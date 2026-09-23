@@ -2,7 +2,7 @@
 
 将扫描 PDF 转成可编辑 TEX 和可预览 PDF，保留字段注释、阶段日志及断点缓存，供人工核对。JSON 仅作为内部状态和兼容缓存，不是转译目标。
 
-本文按 2026-09-09 的代码与本机部署整理。当前采用纯视觉识别、按页升级、字段协调和 TEX 优化编译，通过 Docker 容器顺序处理指定批次。宿主机为 macOS / Apple Silicon，容器为 Linux ARM64 CPU 环境，视觉模型通过远程 API 调用。
+本文按 2026-09-23 的代码与部署整理。当前采用纯视觉识别、按页升级、字段协调和 TEX 优化编译，通过 Docker 容器顺序处理指定批次。本机为 macOS / Apple Silicon；生产服务器为 Ubuntu 24.04 / x86_64，视觉模型通过远程 API 调用。
 
 总项目通过 Git submodule 管理两个独立仓库：`Lexoid` 为识别器，`pipeline` 为优化器与流水线。Compose 项目名和镜像名为 `pdftotex`。
 
@@ -151,16 +151,16 @@ data/optimized/U1/批次数据/A37Z201202602014/BP-C3152R_20260805_132837.tex
 
 ## 4. 环境与配置
 
-需要已启动的 Docker Desktop、Docker Compose v2、可用的模型 API，以及本机 Python 3（监控使用标准库）。当前 Dockerfile 基于本机已有的 `pdftotex-runtime:local` 依赖镜像，其中包含页面方向检测运行时和 XeLaTeX，不能在缺少基础镜像时直接从零构建。
+需要已启动的 Docker Engine、Docker Compose v2、可用的模型 API，以及宿主机 Python 3（监控使用标准库）。`pipeline/docker/Dockerfile.runtime` 可从 `Lexoid/poetry.lock` 构建包含页面方向检测、XeLaTeX 和 Poppler 的依赖镜像。
 
 ```bash
 docker version
 docker compose version
-docker image inspect pdftotex-runtime:local --format '{{.Id}}'
+docker image inspect pdftotex-runtime:local --format '{{.Id}} {{.Os}}/{{.Architecture}}'
 docker volume inspect pdftotex-paddlex-cache --format '{{.Name}}'
 ```
 
-新机器需先导入该依赖镜像，或用 `BASE_RUNTIME_IMAGE` 指定兼容基础镜像。首次部署且确认外部缓存卷不存在时，可执行 `docker volume create pdftotex-paddlex-cache` 创建空卷；它不包含已有权重。
+Apple Silicon 构建的 ARM64 镜像不能直接在 x86 服务器运行。新服务器应从源码原生构建；首次部署且确认外部缓存卷不存在时，可执行 `docker volume create pdftotex-paddlex-cache` 创建空卷，它不包含已有权重。
 
 Compose 依次读取 `Lexoid/.env`、`pipeline/texopt/.env`，后者覆盖前者同名项。`pipeline/.env` 属于另一个入口，不由当前 Compose 的 `env_file` 自动加载。新部署参考 [texopt/.env.example](pipeline/texopt/.env.example)，已有配置不要用模板覆盖。
 
@@ -195,12 +195,11 @@ TEXOPT_SEMANTIC_NAMING=deferred
 ### 5.1 构建和测试
 
 ```bash
-docker compose build worker tests
-docker compose run --rm --no-deps tests
+./scripts/build-images.sh
 docker compose run --rm --no-deps worker texopt-pipeline --help
 ```
 
-镜像为 `pdftotex:local`、`pdftotex-test:local`。构建需要网络下载依赖；测试服务禁用网络，排除已有的两个网络集成测试模块。构建不会更新已经运行的容器。
+统一脚本只允许在 x86_64 Docker 主机执行，依次构建 `pdftotex-runtime:local`、`pdftotex:local` 和 `pdftotex-test:local`，运行完整容器测试，并额外生成带 Git SHA 的不可变标签。镜像和依赖版本清单写入 `../data/audits/images/<git-sha>.txt`。构建需要网络下载依赖；测试服务禁用网络。构建不会更新已经运行的容器。
 
 ### 5.2 当前推荐：指定批次队列
 
