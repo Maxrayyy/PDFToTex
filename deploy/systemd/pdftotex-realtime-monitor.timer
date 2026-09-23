@@ -1,0 +1,12 @@
+[Unit]
+Description=Run PDFToTex realtime worker monitor every two minutes
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=120s
+AccuracySec=5s
+Persistent=true
+Unit=pdftotex-realtime-monitor.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,12 @@
+[Unit]
+Description=Update PDFToTex daily statistics every ten minutes
+
+[Timer]
+OnBootSec=60s
+OnUnitActiveSec=600s
+AccuracySec=10s
+Persistent=true
+Unit=pdftotex-daily-stats.service
+
+[Install]
+WantedBy=timers.target
