@@ -377,6 +377,30 @@ def test_inline_value_id_is_moved_to_comment_line():
     assert repaired == "\\fieldvalue{\\handwritten{1}}\\ensuremath{\\div}\n% #VALUE_ID: LEX-P0080-V0017\n"
 
 
+def test_split_escaped_value_id_after_bare_percent_is_restored_as_comment():
+    from texopt.optimization.local_tex import normalize_inline_field_metadata_comments
+
+    source = (
+        "染料%\n \\#VALUE_ID: LEX-P0012-V0001\n"
+        "% #FIELD_VALUE: 染料体积\n"
+    )
+    repaired, count = normalize_inline_field_metadata_comments(source)
+    assert count == 1
+    assert repaired == (
+        "染料\n % #VALUE_ID: LEX-P0012-V0001\n"
+        "% #FIELD_VALUE: 染料体积\n"
+    )
+
+
+def test_split_value_id_after_escaped_percent_is_not_treated_as_metadata():
+    from texopt.optimization.local_tex import normalize_inline_field_metadata_comments
+
+    source = "100\\%\n \\#VALUE_ID: visible text\n"
+    repaired, count = normalize_inline_field_metadata_comments(source)
+    assert count == 0
+    assert repaired == source
+
+
 def test_escapes_literal_hashes_in_table_text_without_touching_macro_parameters():
     from texopt.optimization.local_tex import normalize_tex
 

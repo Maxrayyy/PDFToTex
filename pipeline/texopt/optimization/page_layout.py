@@ -51,7 +51,9 @@ BLOCK = r"""
   \ifnum#4>1 \fontsize{9pt}{10pt}\selectfont\fi
   \LexoidPageMark{#1}{start}}
 \newcommand{\LexoidPageEnd}[1]{%
-  \par\LexoidPageMark{#1}{end}\endgroup}
+  \par
+  \ifdim\pagetotal=0pt\null\fi
+  \LexoidPageMark{#1}{end}\endgroup}
 % Fixed-height boxes must report their full content size before outer fitting.
 \patchcmd{\@iiiparbox}{\setlength\@tempdimb{#2}}{%
   \setlength\@tempdimb{#2}%

@@ -621,8 +621,24 @@ def normalize_field_metadata_comments(source: str) -> tuple[str, int]:
 
 def normalize_inline_field_metadata_comments(source: str) -> tuple[str, int]:
     """Put field metadata markers on a physical comment line before the field."""
-    pattern = re.compile(r"(?m)(?P<prefix>[^\n])\s*%\s*#VALUE(?:\\)?_ID:")
-    return pattern.subn(lambda match: match.group("prefix") + "\n% #VALUE_ID:", source)
+    split_pattern = re.compile(
+        r"(?m)(?P<prefix>[^\\\n](?:\\\\)*)%[ \t]*\r?\n"
+        r"(?P<indent>[ \t]*)\\#VALUE(?:\\)?_ID:"
+    )
+    source, split_count = split_pattern.subn(
+        lambda match: (
+            match.group("prefix") + "\n" + match.group("indent") + "% #VALUE_ID:"
+        ),
+        source,
+    )
+    pattern = re.compile(
+        r"(?m)(?P<prefix>[^\\\s](?:\\\\)*)[ \t]*%[ \t]*"
+        r"#VALUE(?:\\)?_ID:"
+    )
+    source, inline_count = pattern.subn(
+        lambda match: match.group("prefix") + "\n% #VALUE_ID:", source
+    )
+    return source, split_count + inline_count
 
 
 def normalize_page_boundary_closures(source):

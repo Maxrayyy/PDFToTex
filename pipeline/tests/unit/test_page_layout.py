@@ -56,6 +56,25 @@ def test_title_and_mixed_orientation_have_one_output_page_per_source(tmp_path):
     assert target.with_suffix(".layout.pdf").is_file()
 
 
+def test_comment_only_source_page_still_produces_one_pdf_page(tmp_path):
+    from .page_layout import prepare_layout
+
+    if not shutil.which("xelatex"):
+        pytest.skip("XeLaTeX is required")
+    source = SOURCE.replace("First page body.", "% Visually blank source page")
+    source = source.replace("Second page body.", "% Another visually blank source page")
+    fixed, report = prepare_layout(source, evidence())
+    target = tmp_path / "blank-pages.tex"
+    target.write_text(fixed)
+    ok, log = cli._compile_latex(target, tmp_path, "xelatex", 60, layout_report=report)
+    assert ok, log
+    assert report["actual_pages"] == 2
+    assert report["page_map"] == [
+        {"source_page": 1, "start": 1, "end": 1},
+        {"source_page": 2, "start": 2, "end": 2},
+    ]
+
+
 def test_extra_break_is_reported_but_does_not_fail_compilation(tmp_path):
     from .page_layout import prepare_layout
 
