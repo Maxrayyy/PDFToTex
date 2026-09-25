@@ -1,0 +1,12 @@
+[Unit]
+Description=Start the next PDFToTex batch every two minutes
+
+[Timer]
+OnBootSec=60s
+OnUnitActiveSec=120s
+AccuracySec=5s
+Persistent=true
+Unit=pdftotex-queue-dispatch.service
+
+[Install]
+WantedBy=timers.target

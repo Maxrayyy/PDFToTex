@@ -266,6 +266,46 @@ docker compose run -d --no-deps --name lexiod-directory-demo \
 
 默认执行 `texopt-pipeline --once`，扫描一轮后退出，再执行可复用有效阶段。不要省略范围直接启动默认 worker，否则会扫描整个 `/input`。此模式不自动生成 PDF 队列清单或登记监控；需手动登记当前目标，并将新增工作根目录加入日报 `scan_roots`。
 
+### 5.4 服务器连续批次调度
+
+单个队列容器正常完成后必然退出。要让 U1、U3 各自连续处理多个批次，使用
+[queue_dispatch.py](scripts/queue_dispatch.py) 和
+`pdftotex-queue-dispatch.timer`。调度器每两分钟检查一次，每个单元最多启动一个批次；
+只有当前清单的所有任务均为 `done` 且退出码为 0 时才会前进。失败、暂停、容器丢失或
+状态不完整会阻塞该单元，不会跳过问题批次。
+
+运行配置位于工作区数据目录 `data/operations/queue-dispatch.json`，队列顺序必须显式列出：
+
+```json
+{
+  "repo_root": "/srv/pdftotex/PDFToTex",
+  "staged_root": "/srv/pdftotex/data/operations/pending-2026-09-23/queues",
+  "active_root": "/srv/pdftotex/data/workers/queues",
+  "docker": "/usr/bin/docker",
+  "units": {
+    "U1": ["server-pending-u1-next.json"],
+    "U3": ["server-pending-u3-next.json"]
+  }
+}
+```
+
+配置中只放仍需处理的清单，并按执行顺序排列。安装和检查：
+
+```bash
+sudo PDFTOTEX_ROOT=/srv/pdftotex ./scripts/install-queue-dispatcher.sh
+systemctl is-active pdftotex-queue-dispatch.timer
+systemctl status pdftotex-queue-dispatch.service --no-pager
+journalctl -u pdftotex-queue-dispatch.service -n 100 --no-pager
+```
+
+只检查下一步而不创建容器：
+
+```bash
+python3 scripts/queue_dispatch.py \
+  --config /srv/pdftotex/data/operations/queue-dispatch.json \
+  --dry-run
+```
+
 ## 6. 日常查看、暂停、恢复与清理
 
 ```bash
@@ -377,6 +417,37 @@ systemctl is-active pdftotex-realtime-monitor.timer pdftotex-daily-stats.timer
 读取日志本身不调用模型，但启用自动重启后恢复转换会继续调用模型。当前策略每份 PDF 最多自动重启 3 次，冷却至少 360 秒，实际尝试还要等待下一次轮询。
 
 自动重启只针对退出码 1、当前任务因临时模型服务故障明确暂停、且日志与本次运行时间匹配的容器。认证/权限错误、OOM、普通编译失败或已删除容器不会自动重启。维护时可设置 `auto_restart.enabled=false`。
+
+### 7.4 将服务器监控同步到本机
+
+服务器监控每 120 秒刷新一次。本机通过 SSH 定时拉取该快照，并保存为独立文件
+`../data/monitoring/server/latest.md`，不会覆盖本机容器的
+`../data/monitoring/realtime/latest.md`。拉取过程先校验文档，再原子替换目标；网络中断时保留上一份有效快照。
+
+安装并立即启动 macOS 定时任务：
+
+```bash
+./scripts/install-server-monitor-sync.sh
+```
+
+手动刷新和查看状态：
+
+```bash
+./scripts/sync-server-monitor.sh
+cat ../data/monitoring/server/latest.md
+launchctl print "gui/$(id -u)/com.pdftotex.server-monitor-sync"
+```
+
+停止定时同步：
+
+```bash
+launchctl bootout "gui/$(id -u)/com.pdftotex.server-monitor-sync"
+```
+
+脚本默认连接 `root@123.57.160.96`，读取
+`/srv/pdftotex/data/monitoring/realtime/latest.md`。部署到其他环境时，可在安装命令前设置
+`PDFTOTEX_MONITOR_SERVER`、`PDFTOTEX_MONITOR_REMOTE_FILE`、
+`PDFTOTEX_MONITOR_OUTPUT` 和 `PDFTOTEX_MONITOR_SYNC_INTERVAL`。
 
 邮件告警在非 API 异常退出（包括 OOM、编译失败和异常退出码）时立即发送；临时 API 错误会先自动重启，达到 `max_attempts` 后再次退出才发送。邮件包含容器和 PDF、阶段、退出码、OOM 状态、API/HTTP 错误、队列状态、阶段日志与 Docker 日志尾部。同一运行实例的同类告警只发送一次，SMTP 失败按 `retry_seconds` 重试。
 

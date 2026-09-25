@@ -77,3 +77,17 @@ def test_monitoring_installer_does_not_glob_unrelated_pdftotex_units():
 
     assert 'deploy/systemd/pdftotex-*.service' not in installer
     assert 'deploy/systemd/pdftotex-*.timer' not in installer
+
+
+def test_queue_dispatcher_runs_every_two_minutes_and_uses_explicit_config():
+    service = (ROOT / "deploy/systemd/pdftotex-queue-dispatch.service").read_text()
+    timer = (ROOT / "deploy/systemd/pdftotex-queue-dispatch.timer").read_text()
+    installer = (ROOT / "scripts/install-queue-dispatcher.sh").read_text()
+
+    assert "scripts/queue_dispatch.py" in service
+    assert "data/operations/queue-dispatch.json" in service
+    assert "After=docker.service" in service
+    assert "OnUnitActiveSec=120s" in timer
+    assert "Persistent=true" in timer
+    assert "PDFTOTEX_ROOT" in installer
+    assert "systemctl enable --now pdftotex-queue-dispatch.timer" in installer

@@ -90,10 +90,15 @@ Ubuntu 服务器在成功完成整批队列后，由 `pdftotex-overleaf-publish.
 
 ```bash
 systemctl is-active \
+  pdftotex-queue-dispatch.timer \
   pdftotex-overleaf-publish.timer \
   pdftotex-realtime-monitor.timer \
   pdftotex-daily-stats.timer
 ```
+
+服务器连续执行多个批次时，`data/operations/queue-dispatch.json` 只列仍需处理的 U1/U3
+清单，并按既定顺序排列。`pdftotex-queue-dispatch.timer` 每两分钟为每个单元补充下一批；
+状态不完整或异常退出时必须停在当前批次，不得跳过失败清单。
 
 手工补传一个批次：
 

@@ -1,0 +1,13 @@
+[Unit]
+Description=Start the next configured PDFToTex batch
+Wants=network-online.target
+After=docker.service network-online.target
+ConditionPathExists=@PDFTOTEX_ROOT@/data/operations/queue-dispatch.json
+
+[Service]
+Type=oneshot
+WorkingDirectory=@PDFTOTEX_ROOT@/PDFToTex
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 @PDFTOTEX_ROOT@/PDFToTex/scripts/queue_dispatch.py --config @PDFTOTEX_ROOT@/data/operations/queue-dispatch.json
+TimeoutStartSec=180
+UMask=0027
