@@ -1,6 +1,7 @@
 import importlib.util
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -119,3 +120,18 @@ def test_empty_or_incomplete_status_is_not_complete(tmp_path):
     assert module.queue_complete(status)
     write_status(status, "done")
     assert not module.queue_complete(status)
+
+
+def test_docker_missing_container_error_is_case_insensitive(monkeypatch):
+    module = load_module()
+    monkeypatch.setattr(
+        module.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=1,
+            stdout="",
+            stderr="error: no such object: pdftotex-u3-next\n",
+        ),
+    )
+
+    assert module.docker_container_state("/usr/bin/docker", "pdftotex-u3-next") is None

@@ -42,7 +42,8 @@ def docker_container_state(docker: str, name: str) -> ContainerState:
         capture_output=True,
     )
     if result.returncode != 0:
-        if "No such object" in result.stderr or "No such container" in result.stderr:
+        error = result.stderr.lower()
+        if "no such object" in error or "no such container" in error:
             return None
         raise RuntimeError(f"docker inspect failed for {name}: {result.stderr.strip()}")
     status, exit_code = result.stdout.strip().split("|", 1)
