@@ -117,6 +117,18 @@ journalctl -u pdftotex-overleaf-publish.service -n 100 --no-pager
 tail -n 20 /srv/pdftotex/overleaf/publish-ledger.jsonl
 ```
 
+## 服务器日报同步
+
+本地 `../data/monitoring/daily/daily.md` 从 `2026-09-25` 起使用服务器统计，之前保留本地历史。服务器完成新 PDF 后，本机 `com.pdftotex.server-daily-sync` 每 120 秒拉取完整 `completions.jsonl`，校验后合并并重建日报。
+
+```bash
+./scripts/install-server-daily-sync.sh
+./scripts/sync-server-daily.sh
+launchctl print "gui/$(id -u)/com.pdftotex.server-daily-sync"
+```
+
+不得重新安装 `com.lexiod.daily-stats` 本机扫描任务，否则会在切换日期之后引入第二套统计来源。同步失败时先检查 `../data/monitoring/daily/server-sync.error.log`；不要手工覆盖账本或删除 9 月 24 日以前的记录。
+
 ## 每次优化后的必做验证
 
 任何识别、提示词、表格或 TeX 优化修改，都必须在报告中记录实际结果后才能完成：

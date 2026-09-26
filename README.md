@@ -469,25 +469,23 @@ PDFTOTEX_SMTP_PASSWORD=your-smtp-authorization-code
 
 ## 8. 每日转换与费用监控
 
-宿主机运行 [daily_stats.py](pipeline/texopt/monitoring/daily_stats.py)，配置为 [daily/config.json](../data/monitoring/daily/config.json)，当前每 **600 秒（10 分钟）**刷新。它只读扫描本地状态、产物和调用日志，不依赖容器仍然存在，也不随转换容器退出而停止。
+日报在 `2026-09-25` 切换到服务器数据：本地保留该日期之前的历史账本，之后的记录以服务器 `/srv/pdftotex/data/monitoring/daily/completions.jsonl` 为准。本机每 **120 秒（2 分钟）**拉取服务器账本，校验全部 JSONL 后原子合并，再使用 [daily_stats.py](pipeline/texopt/monitoring/daily_stats.py) 重建同一份日报。网络或数据校验失败时保留最近一次有效结果。
 
 ```bash
-python3 pipeline/texopt/monitoring/daily_stats.py once \
-  --config ../data/monitoring/daily/config.json
+./scripts/install-server-daily-sync.sh
 
-# 首次安装，同名 LaunchAgent 已存在时不要重复安装
-python3 pipeline/texopt/monitoring/daily_stats.py install \
-  --config ../data/monitoring/daily/config.json
+# 立即同步一次
+./scripts/sync-server-daily.sh
 
-launchctl print "gui/$(id -u)/com.lexiod.daily-stats"
-
-python3 pipeline/texopt/monitoring/daily_stats.py stop \
-  --config ../data/monitoring/daily/config.json
+launchctl print "gui/$(id -u)/com.pdftotex.server-daily-sync"
+tail -n 80 ../data/monitoring/daily/server-sync.error.log
 ```
 
-日报位于 `data/monitoring/daily/daily.md`，结构化输出为 `daily.json`、`daily.jsonl`，同目录保留统计状态与 `runner.log`、`runner.error.log`。任务安装在 `~/Library/LaunchAgents/com.lexiod.daily-stats.plist`，登录后可自动加载；`stop` 仅卸载当前会话，永久停用或重装前还需处理该 plist。
+日报位于 `data/monitoring/daily/daily.md`，结构化输出为 `daily.json`、`daily.jsonl`，合并后的持久账本为 `completions.jsonl`。任务安装在 `~/Library/LaunchAgents/com.pdftotex.server-daily-sync.plist`，登录后自动加载；日志为 `server-sync.log` 和 `server-sync.error.log`。安装器会卸载并删除旧的 `com.lexiod.daily-stats` 本机扫描任务，防止切换日期后的记录混入两套来源。
 
-配置的 `scan_roots` 当前只扫描 `data/workers`，`source_root` / `publish_root` 指定输入/正式结果，`path_map` 将 `/input`、`/data` 转换为本机路径。新增工作根目录或迁移机器时同步更新；当前统计开始日为 `2026-09-07`，已记账的历史统计保留。
+安装器把当前终端的 Python 3 绝对路径写入 LaunchAgent，避免后台误用 macOS 自带的 Python 3.9。需要指定其他 Python 3.10 以上解释器时，设置 `PDFTOTEX_DAILY_PYTHON` 后重新安装。
+
+服务器继续用配置中的 `scan_roots` 采集完成记录；本机同步重建报表时禁用扫描，只消费合并账本。当前统计开始日为 `2026-09-07`，本地 `2026-09-24` 及以前的已记账历史保持不变。
 
 - 完成条件：优化阶段完成、编译成功、生成 PDF 存在，且正式 TEX 与任务产物哈希一致。仅有 TEX 文件不足以计入完成。
 - 按北京时间任务完成日归档，源页数和生成页数分别统计。跨天任务的已记录 token 归到完成日，不等同于接口调用日账单。
