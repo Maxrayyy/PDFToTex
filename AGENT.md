@@ -100,6 +100,8 @@ systemctl is-active \
 清单，并按既定顺序排列。`pdftotex-queue-dispatch.timer` 每两分钟为每个单元补充下一批；
 状态不完整或异常退出时必须停在当前批次，不得跳过失败清单。
 
+临时 API 错误的自动重启间隔必须为 3、6、12、24、48、96 分钟，每份 PDF 最多 6 次；配置项为 `auto_restart.retry_delays_seconds`，单位为秒。认证错误、OOM 和编译错误不进入该重试序列。
+
 手工补传一个批次：
 
 ```bash

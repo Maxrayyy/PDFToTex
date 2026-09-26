@@ -109,8 +109,8 @@ def test_api_failure_waits_until_restart_limit_then_sends_once(tmp_path, monkeyp
         "http_status": 503,
         "page": 11,
         "stage": "recognize",
-        "attempts": 3,
-        "max_attempts": 3,
+        "attempts": 6,
+        "max_attempts": 6,
     }
     for status in ("waiting", "starting", "started"):
         item = result(auto_restart={**base, "status": status})
@@ -132,7 +132,7 @@ def test_api_failure_waits_until_restart_limit_then_sends_once(tmp_path, monkeyp
 
     assert len(sent) == 1
     assert "API 重启失败" in sent[0][0]
-    assert "重启次数: 3/3" in sent[0][1]
+    assert "重启次数: 6/6" in sent[0][1]
     assert "HTTP 状态: 503" in sent[0][1]
 
 

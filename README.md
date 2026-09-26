@@ -396,7 +396,10 @@ systemctl is-active pdftotex-realtime-monitor.timer pdftotex-daily-stats.timer
   "docker": "/absolute/path/to/docker",
   "output_dir": "/absolute/path/to/pdftotex-workspace/data/monitoring/realtime",
   "queue_dir": "/absolute/path/to/pdftotex-workspace/data/workers/queues",
-  "auto_restart": {"enabled": true, "cooldown_seconds": 360, "max_attempts": 3},
+  "auto_restart": {
+    "enabled": true,
+    "retry_delays_seconds": [180, 360, 720, 1440, 2880, 5760]
+  },
   "email_alerts": {
     "enabled": true,
     "smtp_host": "smtp.example.com",
@@ -414,7 +417,7 @@ systemctl is-active pdftotex-realtime-monitor.timer pdftotex-daily-stats.timer
 }
 ```
 
-读取日志本身不调用模型，但启用自动重启后恢复转换会继续调用模型。当前策略每份 PDF 最多自动重启 3 次，冷却至少 360 秒，实际尝试还要等待下一次轮询。
+读取日志本身不调用模型，但启用自动重启后恢复转换会继续调用模型。当前策略对每份 PDF 最多自动重启 6 次，六次启动前分别等待 3、6、12、24、48、96 分钟；时间从最新退出或上一次启动尝试中较晚者开始计算，实际尝试还要等待下一次轮询。旧配置的 `cooldown_seconds` 与 `max_attempts` 仍按固定间隔兼容。
 
 自动重启只针对退出码 1、当前任务因临时模型服务故障明确暂停、且日志与本次运行时间匹配的容器。认证/权限错误、OOM、普通编译失败或已删除容器不会自动重启。维护时可设置 `auto_restart.enabled=false`。
 

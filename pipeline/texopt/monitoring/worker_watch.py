@@ -459,6 +459,15 @@ def service_pause_reason(target, result):
         return None
 
 
+def restart_delays(policy):
+    configured = policy.get("retry_delays_seconds")
+    if configured is not None:
+        return [max(1, int(seconds)) for seconds in configured]
+    limit = max(0, int(policy.get("max_attempts", 3)))
+    cooldown = max(1, int(policy.get("cooldown_seconds", 600)))
+    return [cooldown] * limit
+
+
 def auto_restart(target, result, saved, policy, docker, now, persist):
     if not policy.get("enabled"):
         return
@@ -470,15 +479,16 @@ def auto_restart(target, result, saved, policy, docker, now, persist):
     if record.get("document") != document:
         record = {"document": document, "attempts": 0, "last_attempt_at": 0}
         saved["auto_restart"] = record
-    limit = max(0, int(policy.get("max_attempts", 3)))
-    cooldown = max(1, int(policy.get("cooldown_seconds", 600)))
+    delays = restart_delays(policy)
+    limit = len(delays)
     detail = {**reason, "attempts": record["attempts"], "max_attempts": limit}
     result["auto_restart"] = detail
     if record["attempts"] >= limit:
         detail["status"] = "limit_reached"
         return
     result["terminal"] = False
-    ready_at = max(_timestamp(result["finished_at"]), record["last_attempt_at"]) + cooldown
+    delay = delays[record["attempts"]]
+    ready_at = max(_timestamp(result["finished_at"]), record["last_attempt_at"]) + delay
     if now < ready_at:
         detail.update(status="waiting", retry_after_seconds=max(1, int(ready_at - now)))
         return

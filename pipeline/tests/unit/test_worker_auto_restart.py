@@ -21,7 +21,8 @@ def setup_outage(tmp_path, monkeypatch, error="APIConnectionError"):
         "source": "sample.pdf", "status": "paused", "stages": [
             {"stage": "recognize", "status": "failed"}]}]}))
     config = {"docker": "docker", "output_dir": str(tmp_path / "monitor"),
-        "auto_restart": {"enabled": True, "cooldown_seconds": 600, "max_attempts": 3},
+        "auto_restart": {"enabled": True,
+            "retry_delays_seconds": [180, 360, 720, 1440, 2880, 5760]},
         "containers": [{"name": "worker-a", "stem": "sample", "pages": 69,
             "work_root": str(work), "output_tex": str(tmp_path / "out.tex")} ]}
     iso = lambda value: datetime.fromtimestamp(value, timezone.utc).isoformat()
@@ -87,22 +88,31 @@ def test_only_fresh_network_failure_of_paused_document_can_restart(tmp_path, mon
     assert calls == []
 
 
-def test_cooldown_and_persistent_per_document_restart_limit(tmp_path, monkeypatch):
+def test_exponential_delays_and_persistent_per_document_restart_limit(tmp_path, monkeypatch):
     config, _, clock, calls, _ = setup_outage(tmp_path, monkeypatch)
-    clock[0] = 1500
-    assert watch.poll(config) is False
-    assert snapshot(config)["containers"][0]["auto_restart"]["status"] == "waiting"
-    assert calls == []
-    for now in (2001, 2602, 3203):
-        clock[0] = now
+    delays = [180, 360, 720, 1440, 2880, 5760]
+    previous = 1400
+
+    for attempt, delay in enumerate(delays, 1):
+        clock[0] = previous + delay - 1
         assert watch.poll(config) is False
-        if len(calls) < 3:
-            assert watch.poll(config) is False
-    assert len(calls) == 3
-    clock[0] = 3804
+        detail = snapshot(config)["containers"][0]["auto_restart"]
+        assert detail["status"] == "waiting"
+        assert detail["retry_after_seconds"] == 1
+        assert len(calls) == attempt - 1
+
+        clock[0] = previous + delay
+        assert watch.poll(config) is False
+        detail = snapshot(config)["containers"][0]["auto_restart"]
+        assert detail["status"] == "started"
+        assert detail["attempts"] == attempt
+        assert detail["max_attempts"] == 6
+        assert len(calls) == attempt
+        previous = clock[0]
+
     assert watch.poll(config) is True
     assert snapshot(config)["containers"][0]["auto_restart"]["status"] == "limit_reached"
-    assert len(calls) == 3
+    assert len(calls) == 6
 
 
 def test_failed_docker_start_is_logged_and_waits_before_retry(tmp_path, monkeypatch):
@@ -145,7 +155,7 @@ def test_next_document_gets_its_own_restart_budget(tmp_path, monkeypatch):
     output = Path(config["output_dir"])
     output.mkdir()
     (output / "state.json").write_text(json.dumps({"worker-a": {"auto_restart": {
-        "document": "previous-pdf", "attempts": 3, "last_attempt_at": 2000}}}))
+        "document": "previous-pdf", "attempts": 6, "last_attempt_at": 2000}}}))
     assert watch.poll(config) is False
     assert len(calls) == 1
     assert snapshot(config)["containers"][0]["auto_restart"]["attempts"] == 1
