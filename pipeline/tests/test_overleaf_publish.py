@@ -188,6 +188,62 @@ def load_scanner():
     return module
 
 
+def load_publisher():
+    spec = importlib.util.spec_from_file_location("overleaf_publish", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_publish_rebases_and_retries_when_remote_advances(tmp_path, monkeypatch):
+    publisher = load_publisher()
+    source_root = tmp_path / "optimized" / "U3" / "20260808"
+    batch = source_root / "BATCH-U3"
+    batch.mkdir(parents=True)
+    (batch / "main.tex").write_text("content\n", encoding="utf-8")
+    checkout = tmp_path / "projects" / "u3"
+    checkout.mkdir(parents=True)
+    config = {
+        "ledger": str(tmp_path / "ledger.jsonl"),
+        "projects": {
+            "U3": {
+                "source_root": str(source_root),
+                "target_root": "U3_tex—待审核/20260808",
+                "checkout": str(checkout),
+            }
+        },
+    }
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps(config, ensure_ascii=False), encoding="utf-8")
+    calls = []
+    pushes = 0
+
+    monkeypatch.setattr(publisher, "ensure_checkout", lambda project: checkout)
+
+    def fake_run_git(repository, *args):
+        nonlocal pushes
+        calls.append(args)
+        if args[:3] == ("status", "--porcelain", "--"):
+            return "A  batch"
+        if args == ("push", "origin", "HEAD"):
+            pushes += 1
+            if pushes == 1:
+                raise RuntimeError("[rejected] HEAD -> main (fetch first)")
+        if args == ("rev-parse", "HEAD"):
+            return "a" * 40
+        return ""
+
+    monkeypatch.setattr(publisher, "run_git", fake_run_git)
+
+    result = publisher.publish_batch(config_path, "U3", batch)
+
+    assert result["status"] == "pushed"
+    assert pushes == 2
+    assert ("pull", "--rebase") in calls
+    assert not any("--force" in argument for call in calls for argument in call)
+
+
 def scanner_config(tmp_path: Path) -> dict:
     host_data = tmp_path / "data"
     return {
@@ -248,6 +304,34 @@ def test_scanner_discovers_successful_batches_after_enable_time(tmp_path):
         ("U3", "BATCH-U3"),
     ]
     assert all(item.queue_status.name == "mixed.status.json" for item in candidates)
+
+
+def test_scanner_discovers_batch_with_existing_published_outputs(tmp_path):
+    scanner = load_scanner()
+    config = scanner_config(tmp_path)
+    queue_dir = Path(config["queue_dir"])
+    write_queue_status(
+        queue_dir / "resumed.status.json",
+        finished_at="2026-09-23T12:01:00+00:00",
+        jobs=[
+            {
+                "status": "done",
+                "skipped_existing": True,
+                "output_tex": "/data/optimized/U3/20260808/BATCH-U3/a.tex",
+            },
+            {
+                "status": "done",
+                "exit_code": 0,
+                "output_tex": "/data/optimized/U3/20260808/BATCH-U3/b.tex",
+            },
+        ],
+    )
+
+    candidates = scanner.discover_completed_batches(config)
+
+    assert [(item.unit, item.batch_dir.name) for item in candidates] == [
+        ("U3", "BATCH-U3")
+    ]
 
 
 def test_scanner_ignores_old_incomplete_and_paused_queues(tmp_path):

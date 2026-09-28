@@ -70,8 +70,11 @@ def discover_completed_batches(config: dict) -> list[Candidate]:
             continue
         if state.get("status") == "paused":
             continue
-        if not all(job.get("status") == "done" and job.get("exit_code") == 0
-                   for job in jobs):
+        if not all(
+            job.get("status") == "done"
+            and (job.get("exit_code") == 0 or job.get("skipped_existing") is True)
+            for job in jobs
+        ):
             continue
         for job in jobs:
             output = job.get("output_tex")

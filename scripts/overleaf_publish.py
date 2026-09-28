@@ -19,6 +19,7 @@ EXCLUDED_DIRS = {".cache", ".pipeline", ".state"}
 EXCLUDED_SUFFIXES = {
     ".db", ".log", ".sqlite", ".sqlite3", ".sqlite3-shm", ".sqlite3-wal"
 }
+PUSH_RETRY_ATTEMPTS = 6
 
 
 def included_files(batch: Path) -> list[Path]:
@@ -61,6 +62,19 @@ def run_git(checkout: Path | None, *args: str) -> str:
         message = result.stderr.strip() or result.stdout.strip() or "git command failed"
         raise RuntimeError(message)
     return result.stdout.strip()
+
+
+def push_with_rebase_retry(checkout: Path) -> None:
+    for attempt in range(PUSH_RETRY_ATTEMPTS):
+        try:
+            run_git(checkout, "push", "origin", "HEAD")
+            return
+        except RuntimeError as error:
+            message = str(error).lower()
+            remote_advanced = "fetch first" in message or "non-fast-forward" in message
+            if not remote_advanced or attempt == PUSH_RETRY_ATTEMPTS - 1:
+                raise
+            run_git(checkout, "pull", "--rebase")
 
 
 def load_config(path: Path) -> dict:
@@ -178,7 +192,7 @@ def publish_batch(config_path: Path, unit: str, batch_dir: Path,
         changed = bool(run_git(checkout, "status", "--porcelain", "--", relative_target))
         if changed:
             run_git(checkout, "commit", "-m", f"上传 {unit} 批次 {batch.name}")
-        run_git(checkout, "push", "origin", "HEAD")
+        push_with_rebase_retry(checkout)
         commit = run_git(checkout, "rev-parse", "HEAD")
         record = {
             "status": "pushed",
