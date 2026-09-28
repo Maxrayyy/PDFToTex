@@ -122,6 +122,23 @@ def test_empty_or_incomplete_status_is_not_complete(tmp_path):
     assert not module.queue_complete(status)
 
 
+def test_skipped_existing_jobs_are_complete_without_exit_code(tmp_path):
+    module = load_module()
+    status = tmp_path / "queue.status.json"
+    status.write_text(
+        json.dumps(
+            {
+                "jobs": [
+                    {"status": "done", "skipped_existing": True},
+                    {"status": "done", "exit_code": 0},
+                ]
+            }
+        )
+    )
+
+    assert module.queue_complete(status)
+
+
 def test_docker_missing_container_error_is_case_insensitive(monkeypatch):
     module = load_module()
     monkeypatch.setattr(

@@ -89,7 +89,9 @@ def collect_batches(settings, queue_dir):
             state = 'skipped'
         elif job is not None:
             state = job.get('status', 'pending')
-            if state == 'done' and not (job.get('exit_code') == 0 and valid):
+            completed_run = (job.get('exit_code') == 0
+                             or job.get('skipped_existing') is True)
+            if state == 'done' and not (completed_run and valid):
                 state = 'review'
         elif valid and stem_counts[path.stem] == 1:
             stage = workers / path.stem / '.pipeline' / path.stem

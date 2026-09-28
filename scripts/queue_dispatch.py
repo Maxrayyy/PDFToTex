@@ -30,7 +30,8 @@ def queue_complete(status_path: Path) -> bool:
         return False
     jobs = state.get("jobs")
     return bool(jobs) and all(
-        job.get("status") == "done" and job.get("exit_code") == 0
+        job.get("status") == "done"
+        and (job.get("exit_code") == 0 or job.get("skipped_existing") is True)
         for job in jobs
     )
 

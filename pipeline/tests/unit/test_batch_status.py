@@ -75,6 +75,29 @@ def test_old_tex_alone_is_not_proof_and_future_month_is_flagged(tmp_path):
     assert '2027-07' in report and '未来年月' in report
 
 
+def test_skipped_existing_job_with_valid_publication_is_complete(tmp_path):
+    settings = {k: str(tmp_path / k) for k in ('source_root', 'publish_root', 'work_root')}
+    relative = Path('U1/batches/A39Z204202601003/a.pdf')
+    source = Path(settings['source_root']) / relative
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b'pdf')
+    published = Path(settings['publish_root']) / relative.with_suffix('.tex')
+    published.parent.mkdir(parents=True)
+    published.write_text(r'\begin{document}checked\end{document}')
+    queue_dir = tmp_path / 'queues'
+    queue_dir.mkdir()
+    (queue_dir / 'resume.status.json').write_text(json.dumps({'jobs': [{
+        'source': str(Path('/input') / relative),
+        'status': 'done',
+        'skipped_existing': True,
+    }]}))
+
+    row = collect_batches(settings, queue_dir)[0]
+
+    assert row['completed'] == 1
+    assert row['status'] == '已完成'
+
+
 def test_operator_confirmed_batch_is_persistently_complete(tmp_path):
     settings = {k: str(tmp_path / k) for k in ('source_root', 'publish_root', 'work_root')}
     settings['confirmed_complete_batches'] = ['A31Z201202604022']
