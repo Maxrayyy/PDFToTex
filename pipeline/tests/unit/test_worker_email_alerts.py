@@ -181,7 +181,8 @@ def test_smtp_uses_password_environment_without_putting_it_in_message(monkeypatc
             calls.append(("login", username, password))
 
         def send_message(self, message):
-            calls.append(("send", message["To"], message.get_content()))
+            calls.append(("send", message))
+            return {}
 
     monkeypatch.setenv("PDFTOTEX_SMTP_PASSWORD", "secret-value")
     monkeypatch.setattr(watch.smtplib, "SMTP_SSL", FakeSmtp)
@@ -190,5 +191,9 @@ def test_smtp_uses_password_environment_without_putting_it_in_message(monkeypatc
 
     assert calls[0][:3] == ("connect", "smtp.163.com", 465)
     assert calls[1] == ("login", "sender@example.com", "secret-value")
-    assert calls[2][0:2] == ("send", "recipient@example.com")
-    assert "secret-value" not in calls[2][2]
+    assert calls[2][0] == "send"
+    message = calls[2][1]
+    assert message["To"] == "recipient@example.com"
+    assert message["Date"]
+    assert message["Message-ID"]
+    assert "secret-value" not in message.get_content()

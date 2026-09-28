@@ -279,7 +279,7 @@ def test_queue_report_keeps_order_and_uses_completion_records(tmp_path, monkeypa
     queue_dir = tmp_path / "queues"
     queue_dir.mkdir()
     data = {"container": "worker-a", "jobs": [
-        {"source": "/input/first.pdf", "status": "done", "exit_code": 0},
+        {"source": "/input/first.pdf", "status": "done", "skipped_existing": True},
         {"source": "/input/current.pdf", "status": "running"},
         {"source": "/input/last.pdf", "status": "pending"}],
         "active_source": "/input/current.pdf"}

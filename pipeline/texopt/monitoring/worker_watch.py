@@ -6,6 +6,7 @@ import argparse
 from collections import Counter, deque
 from datetime import datetime
 from email.message import EmailMessage
+from email.utils import formatdate, make_msgid
 import fcntl
 import hashlib
 import json
@@ -612,13 +613,17 @@ def send_email_message(settings, subject, body):
     message["From"] = sender
     message["To"] = recipient
     message["Subject"] = subject
+    message["Date"] = formatdate(localtime=True)
+    message["Message-ID"] = make_msgid(domain=sender.rpartition("@")[2] or None)
     message.set_content(body)
     context = ssl.create_default_context()
     with smtplib.SMTP_SSL(settings["smtp_host"], int(settings.get("smtp_port", 465)),
                            timeout=int(settings.get("timeout_seconds", 30)),
                            context=context) as client:
         client.login(settings.get("username", sender), password)
-        client.send_message(message)
+        refused = client.send_message(message)
+        if refused:
+            raise smtplib.SMTPRecipientsRefused(refused)
 
 
 def process_email_alert(target, result, saved, settings, docker, now, *,
@@ -670,7 +675,8 @@ def queue_progress(directory, name):
     path, data = matches[0]
     try:
         jobs = [{"pdf": Path(job["source"]).name, "status": job["status"],
-                 "completed": job["status"] == "done" and job.get("exit_code") == 0}
+                 "completed": job["status"] == "done" and (
+                     job.get("exit_code") == 0 or job.get("skipped_existing") is True)}
                 for job in data["jobs"]]
         return {"path": str(path), "jobs": jobs, "total": len(jobs),
                 "completed": sum(job["completed"] for job in jobs)}
