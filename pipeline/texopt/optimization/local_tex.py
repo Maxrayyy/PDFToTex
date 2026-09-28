@@ -328,6 +328,8 @@ PACKAGE_USES = {
     "pict2e": r"\\begin\{picture\}",
     "multirow": r"\\multirow\b",
     "booktabs": r"\\(?:toprule|midrule|bottomrule|cmidrule)\b",
+    "diagbox": r"\\diagbox\b",
+    "colortbl": r"\\(?:cellcolor|rowcolor|columncolor)\b",
     "makecell": r"\\(?:makecell|thead)\b",
     "tabularx": r"\\begin\{tabularx\}",
     "longtable": r"\\begin\{longtable\}",

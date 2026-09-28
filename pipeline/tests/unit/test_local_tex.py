@@ -118,6 +118,37 @@ def test_upright_greek_macro_injects_available_package(tmp_path):
     assert not compile_page(fixed, tmp_path / "upgreek")
 
 
+def test_diagbox_macro_injects_required_package():
+    from texopt.optimization.local_tex import normalize_tex
+
+    source = (
+        r"\documentclass{article}\begin{document}"
+        r"\begin{tabular}{|c|c|}\hline"
+        r"\diagbox{A}{B} & Value\\\hline"
+        r"\end{tabular}\end{document}"
+    )
+    fixed, changes = normalize_tex(source)
+
+    assert changes["missing_support"] == 1
+    assert r"\RequirePackage{diagbox}" in fixed
+
+
+def test_cellcolor_macro_injects_colortbl_when_xcolor_is_already_loaded():
+    from texopt.optimization.local_tex import normalize_tex
+
+    source = (
+        r"\documentclass{article}\usepackage{xcolor}\begin{document}"
+        r"\begin{tabular}{|c|}\hline"
+        r"\cellcolor{gray!45}\textbf{Electronic Signatures}\\\hline"
+        r"\end{tabular}\end{document}"
+    )
+    fixed, changes = normalize_tex(source)
+
+    assert changes["missing_support"] == 1
+    assert r"\RequirePackage{colortbl}" in fixed
+    assert normalize_tex(fixed)[0] == fixed
+
+
 def test_ulem_script_repair_preserves_fields_and_ignores_literals_and_boxes():
     from texopt.optimization.local_tex import normalize_tex
 
