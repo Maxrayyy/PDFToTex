@@ -131,7 +131,10 @@ and nested table before returning:
    error and must not be changed solely to make the counts equal.
 3. Treat `&` and `\\\\` inside braces/nested tables separately from parent-row separators.
    A visual line break inside an X/p/m/b cell must not accidentally terminate the row;
-   use a safe paragraph break such as `\\newline` or structural grouping when needed.
+   use `\\newline` for a line break that stays inside the current cell and row. Use
+   `\\tabularnewline` or `\\[...]` only after the final cell of a physical row.
+   Never use a row break to split content such as “通过，泡点值 … / 失败” inside
+   one result cell, because it shifts later cells and breaks vertical rules.
 4. Trace errors reported at `\\end{tabularx}` back through ALL preceding rows: tabularx
    captures its body, so the actual bad row is commonly earlier than the reported line.
 5. Pay special attention to OCR/Lexoid forms whose parent table declares four columns
