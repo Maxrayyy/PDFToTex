@@ -534,7 +534,7 @@ python3 scripts/package-overleaf-batch.py \
 | 分类 | 正式产物目录 | Overleaf 项目内目录 |
 | --- | --- | --- |
 | U1 | `data/optimized/U1/批次数据/<批次号>` | `待审核/<批次号>` |
-| U3 | `data/optimized/U3/20260808/<批次号>` | `U3_tex—待审核/20260808/<批次号>` |
+| U3 | `data/optimized/U3/20260808/<批次号>` | `待审核/<批次号>` |
 
 安装器从标准输入读取 Git authentication token。token 只写入服务器 `/srv/pdftotex/overleaf/home/.git-credentials`，权限为 `0600`；两个 remote URL、目录映射和自动发布启用时间写入 `/srv/pdftotex/overleaf/config.json`。安装时需要提供两个不含 token 的 Git URL：
 

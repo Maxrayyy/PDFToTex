@@ -254,7 +254,7 @@ def test_publish_rebases_and_retries_when_remote_advances(tmp_path, monkeypatch)
         "projects": {
             "U3": {
                 "source_root": str(source_root),
-                "target_root": "U3_tex—待审核/20260808",
+                "target_root": "待审核",
                 "checkout": str(checkout),
             }
         },

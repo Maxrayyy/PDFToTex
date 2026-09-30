@@ -86,7 +86,7 @@ cat ../data/monitoring/realtime/latest.md
 
 ## Overleaf 发布
 
-Ubuntu 服务器在成功完成整批队列后，由 `pdftotex-overleaf-publish.timer` 每两分钟自动检查并发布。当前只启用 U1 和 U3：U1 放入项目的 `待审核/<批次号>`，U3 放入 `U3_tex—待审核/20260808/<批次号>`；U2 已完成，不注册到自动发布配置。启动服务器批次时必须同时确认自动发布 timer 和两个监控 timer 均为 `active`：
+Ubuntu 服务器在成功完成整批队列后，由 `pdftotex-overleaf-publish.timer` 每两分钟自动检查并发布。当前只启用 U1 和 U3，均放入各自项目的 `待审核/<批次号>`；U2 已完成，不注册到自动发布配置。上传前先拉取最新提交，只增加缺失文件，已有同名文件内容不同时停止并报告。启动服务器批次时必须同时确认自动发布 timer 和两个监控 timer 均为 `active`：
 
 ```bash
 systemctl is-active \

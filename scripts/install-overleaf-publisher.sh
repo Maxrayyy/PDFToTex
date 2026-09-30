@@ -85,7 +85,7 @@ config = {
         "U3": {
             "remote": os.environ["OVERLEAF_U3_REMOTE"],
             "source_root": str(root / "data/optimized/U3/20260808"),
-            "target_root": "U3_tex—待审核/20260808",
+            "target_root": "待审核",
             "checkout": str(root / "overleaf/projects/u3"),
         },
     },
