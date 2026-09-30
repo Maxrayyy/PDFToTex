@@ -127,6 +127,28 @@ def test_publish_refuses_existing_batch_without_overwriting(tmp_path):
     assert not (tmp_path / "ledger.jsonl").exists()
 
 
+def test_publish_adds_missing_files_to_existing_batch(tmp_path):
+    remote = seed_remote(tmp_path)
+    source_root = tmp_path / "optimized" / "U1" / "批次数据"
+    batch = source_root / "BATCH-OLD"
+    batch.mkdir(parents=True)
+    (batch / "new.tex").write_text("new\n", encoding="utf-8")
+    config = write_config(tmp_path, remote, source_root)
+    git("clone", str(remote), str(tmp_path / "projects" / "u1"))
+    seed = tmp_path / "seed"
+    (seed / "待审核" / "BATCH-OLD" / "stale.tex").write_text("human edit\n")
+    git("commit", "-am", "human edit", cwd=seed)
+    git("push", cwd=seed)
+
+    result = run_publish(config, batch)
+
+    assert result.returncode == 0, result.stderr
+    checkout = checkout_remote(tmp_path, remote)
+    target = checkout / "待审核" / "BATCH-OLD"
+    assert (target / "stale.tex").read_text() == "human edit\n"
+    assert (target / "new.tex").read_text() == "new\n"
+
+
 def test_publish_same_content_is_idempotent(tmp_path):
     remote = seed_remote(tmp_path)
     source_root = tmp_path / "optimized" / "U1" / "批次数据"
@@ -163,6 +185,11 @@ def test_failed_push_does_not_write_success_ledger(tmp_path):
     assert result.returncode != 0
     ledger = tmp_path / "ledger.jsonl"
     assert not ledger.exists() or not ledger.read_text().strip()
+
+    hook.unlink()
+    retried = run_publish(config, batch)
+    assert retried.returncode == 0, retried.stderr
+    assert len(ledger.read_text().splitlines()) == 1
 
 
 def test_publish_rejects_directory_outside_configured_source_root(tmp_path):

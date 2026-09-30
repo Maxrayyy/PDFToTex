@@ -12,7 +12,6 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
-import tempfile
 
 
 EXCLUDED_DIRS = {".cache", ".pipeline", ".state"}
@@ -147,19 +146,26 @@ def ensure_checkout(project: dict) -> Path:
 
 
 def sync_batch(batch: Path, files: list[Path], destination: Path) -> None:
-    if destination.exists():
-        raise FileExistsError(f"Overleaf batch already exists: {destination}")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = Path(tempfile.mkdtemp(prefix=f".{batch.name}.", dir=destination.parent))
-    try:
-        for source in files:
-            relative = source.relative_to(batch)
-            target = temporary / relative
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, target)
-        os.replace(temporary, destination)
-    finally:
-        shutil.rmtree(temporary, ignore_errors=True)
+    additions = []
+    for source in files:
+        target = destination / source.relative_to(batch)
+        for parent in (target, *target.parents):
+            if parent.is_symlink():
+                raise ValueError(f"symbolic links are not allowed in destination: {parent}")
+            if parent != target and parent.exists() and not parent.is_dir():
+                raise FileExistsError(f"Overleaf parent path is not a directory: {parent}")
+            if parent == destination:
+                break
+        if target.exists():
+            if not target.is_file() or target.read_bytes() != source.read_bytes():
+                raise FileExistsError(f"Overleaf file already exists with different content: {target}")
+        else:
+            additions.append((source, target))
+    # Check every collision before changing the checkout, so conflicts leave it clean.
+    for source, target in additions:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with source.open("rb") as reader, target.open("xb") as writer:
+            shutil.copyfileobj(reader, writer)
 
 
 def publish_batch(config_path: Path, unit: str, batch_dir: Path,

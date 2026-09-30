@@ -551,7 +551,7 @@ unset OVERLEAF_TOKEN
 
 `OVERLEAF_GIT_PROXY` 只写入 Overleaf 专用 HOME 下的 Git 配置。服务器已运行 Mihomo 时使用 `http://127.0.0.1:7890`，用于稳定首次大项目 clone 和后续 push；不影响主仓库或系统级 Git 配置。
 
-定时任务每两分钟读取 `data/workers/queues/*.status.json`。只有安装后完成、所有任务均为 `done` 且退出码为 `0` 的队列才会自动发布；首次启用不会上传历史批次。同步只替换当前批次文件夹，不删除 Overleaf 项目中的其他目录。发布成功记录在 `/srv/pdftotex/overleaf/publish-ledger.jsonl`，相同内容不会重复提交。
+定时任务每两分钟读取 `data/workers/queues/*.status.json`。只有安装后完成、所有任务均为 `done` 且退出码为 `0` 的队列才会自动发布；首次启用不会上传历史批次。每次上传前先拉取最新远端提交，只添加缺失文件；同名且内容相同的文件跳过，同名但内容不同则停止并报告，保留已有文件和人工修改。并发编辑导致 push 被拒绝时，拉取并 rebase 后重试，不强制推送。发布成功记录在 `/srv/pdftotex/overleaf/publish-ledger.jsonl`，相同内容不会重复提交。
 
 ```bash
 systemctl status pdftotex-overleaf-publish.timer
