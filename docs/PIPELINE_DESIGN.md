@@ -64,7 +64,7 @@ manifest.json          ← 最近一轮各阶段状态
 
 1. **240 DPI 渲染** → 渲染 PDF 页面为 PNG
 2. **Paddle 方向检测** → 自动旋转归一（`--auto-orient`）
-3. **`gpt-5.6-sol`** 逐页识别，输出 TeX + 识别证据 JSON
+3. **`gpt-6-sol`** 逐页识别，输出 TeX + 识别证据 JSON
 4. `RECOGNITION_OCR=none`：Paddle/PaddleX **仅用于页面方向检测**，正文纯视觉模型
 
 ### 小设计
@@ -210,7 +210,7 @@ subprocess.run(["xelatex", "-no-shell-escape", "-interaction=nonstopmode",
 - **仅一次升级**：`max_page_attempts=1`，失败不循环，避免无限成本。
 - **升级失败不改写原文**：失败的 `VisionPageResult` 以原文替换，不污染 TeX。
 - **第一页的特殊处理**：第 1 页的 preamble 被缓存并用于后续所有页的独立编译，保证跨页有相同前导码。
-- **`page_models` 记录**：`report["page_models"]` 记录每页实际使用的模型（`gpt-5.6-sol` 或 `gpt-6-astra`），写入证据 JSON。
+- **`page_models` 记录**：`report["page_models"]` 记录每页实际使用的模型（`gpt-6-sol` 或 `gpt-6-astra`），写入证据 JSON。
 - **`page_fallback` 开关**：当 `fallback_model == vision_model` 时跳过升级（直接返回原文），用于测试或禁用升级的场景。
 
 ---
@@ -644,7 +644,7 @@ data/workers/<主干>/.pipeline/<主干>/
 
 | 模型 | 用途 | 成本 | 特点 |
 |------|------|------|------|
-| `gpt-5.6-sol` | 主识别 + 语法修复 | 较低 | 默认视觉/语言能力 |
+| `gpt-6-sol` | 主识别 + 语法修复 | 较低 | 默认视觉/语言能力 |
 | `gpt-6-astra` | 升级识别 + 字段协调 | 较高 | 更强的视觉推理，仅出错页使用 |
 
 只在必要时使用更贵的模型，控制成本。

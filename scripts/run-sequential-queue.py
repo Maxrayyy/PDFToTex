@@ -16,7 +16,7 @@
 适合项目现有的 /data 挂载布局，并非任意本地路径直接可用的通用转换器。
 
 模型和发布路径从 BatchConfig.from_env() 读取；必须符合脚本已核准的检查条件：
-    LEXOID_MODEL=gpt-5.6-sol，VISION_FALLBACK_MODEL=gpt-6-astra，
+    LEXOID_MODEL=gpt-6-sol，VISION_FALLBACK_MODEL=gpt-6-astra，
     RENDER_DPI=240，VISION_CONCURRENCY=2，RECONCILE_CONCURRENCY=2。
 优化器版本必须为 texopt-layout-v11-outline-field-safe。
 应设置 PIPELINE_PUBLISH_ROOT 为发布根目录，并按现有流水线要求配置其余模型/凭据。
@@ -83,7 +83,7 @@ def main():
     config = BatchConfig.from_env()
     assert (config.vision_model, config.fallback_model, config.render_dpi,
             config.vision_concurrency, config.reconcile_concurrency) == (
-                'gpt-5.6-sol', 'gpt-6-astra', 240, 2, 2)
+                'gpt-6-sol', 'gpt-6-astra', 240, 2, 2)
     assert config.optimizer_version == 'texopt-layout-v11-outline-field-safe'
     if len({Path(source).stem for source in queue['sources']}) != len(queue['sources']):
         raise ValueError('Queue PDF stems must be unique to keep work directories separate')

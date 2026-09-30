@@ -22,11 +22,12 @@ def seed_remote(tmp_path: Path) -> Path:
     remote = tmp_path / "remote.git"
     seed = tmp_path / "seed"
     git("init", "--bare", str(remote))
+    git("symbolic-ref", "HEAD", "refs/heads/master", cwd=remote)
     git("init", "-b", "master", str(seed))
     git("config", "user.name", "Test", cwd=seed)
     git("config", "user.email", "test@example.invalid", cwd=seed)
     (seed / "README.md").write_text("keep\n", encoding="utf-8")
-    old_batch = seed / "待审核" / "BATCH-001"
+    old_batch = seed / "待审核" / "BATCH-OLD"
     old_batch.mkdir(parents=True)
     (old_batch / "stale.tex").write_text("stale\n", encoding="utf-8")
     git("add", ".", cwd=seed)
@@ -78,7 +79,7 @@ def checkout_remote(tmp_path: Path, remote: Path) -> Path:
     return checkout
 
 
-def test_publish_replaces_only_current_batch_and_excludes_runtime_files(tmp_path):
+def test_publish_adds_batch_and_preserves_existing_files(tmp_path):
     remote = seed_remote(tmp_path)
     source_root = tmp_path / "optimized" / "U1" / "批次数据"
     batch = source_root / "BATCH-001"
@@ -98,7 +99,7 @@ def test_publish_replaces_only_current_batch_and_excludes_runtime_files(tmp_path
     target = checkout / "待审核" / "BATCH-001"
     assert (target / "main.tex").read_text(encoding="utf-8") == "new\n"
     assert (target / "assets" / "stamp.png").read_bytes() == b"png"
-    assert not (target / "stale.tex").exists()
+    assert (checkout / "待审核" / "BATCH-OLD" / "stale.tex").read_text() == "stale\n"
     assert not (target / ".pipeline").exists()
     assert not (target / "secret.env").exists()
     records = [json.loads(line) for line in (tmp_path / "ledger.jsonl").read_text().splitlines()]
@@ -107,6 +108,23 @@ def test_publish_replaces_only_current_batch_and_excludes_runtime_files(tmp_path
     assert records[0]["batch"] == "BATCH-001"
     assert records[0]["status"] == "pushed"
     assert len(records[0]["commit"]) == 40
+
+
+def test_publish_refuses_existing_batch_without_overwriting(tmp_path):
+    remote = seed_remote(tmp_path)
+    source_root = tmp_path / "optimized" / "U1" / "批次数据"
+    batch = source_root / "BATCH-OLD"
+    batch.mkdir(parents=True)
+    (batch / "stale.tex").write_text("replacement\n", encoding="utf-8")
+    config = write_config(tmp_path, remote, source_root)
+
+    result = run_publish(config, batch)
+
+    assert result.returncode != 0
+    assert "already exists" in result.stderr
+    checkout = checkout_remote(tmp_path, remote)
+    assert (checkout / "待审核" / "BATCH-OLD" / "stale.tex").read_text() == "stale\n"
+    assert not (tmp_path / "ledger.jsonl").exists()
 
 
 def test_publish_same_content_is_idempotent(tmp_path):

@@ -147,6 +147,8 @@ def ensure_checkout(project: dict) -> Path:
 
 
 def sync_batch(batch: Path, files: list[Path], destination: Path) -> None:
+    if destination.exists():
+        raise FileExistsError(f"Overleaf batch already exists: {destination}")
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = Path(tempfile.mkdtemp(prefix=f".{batch.name}.", dir=destination.parent))
     try:
@@ -155,8 +157,6 @@ def sync_batch(batch: Path, files: list[Path], destination: Path) -> None:
             target = temporary / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
-        if destination.exists():
-            shutil.rmtree(destination)
         os.replace(temporary, destination)
     finally:
         shutil.rmtree(temporary, ignore_errors=True)
