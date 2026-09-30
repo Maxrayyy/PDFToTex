@@ -55,41 +55,26 @@ else
 fi
 chmod 0600 "$home_dir/.gitconfig"
 
-DEPLOYMENT_ROOT="$deployment_root" CONFIG_FILE="$config_file" \
+PYTHONPATH="$repo_root/scripts" DEPLOYMENT_ROOT="$deployment_root" CONFIG_FILE="$config_file" \
+CONFIG_TEMPLATE="${OVERLEAF_CONFIG_TEMPLATE:-$repo_root/deploy/overleaf.example.json}" \
 OVERLEAF_U1_REMOTE="$OVERLEAF_U1_REMOTE" \
 OVERLEAF_U3_REMOTE="$OVERLEAF_U3_REMOTE" \
 python3 - <<'PY'
-from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+from overleaf_publish import installation_config
 
 root = Path(os.environ["DEPLOYMENT_ROOT"])
 path = Path(os.environ["CONFIG_FILE"])
 previous = {}
 if path.exists():
     previous = json.loads(path.read_text(encoding="utf-8"))
-config = {
-    "enabled_after": previous.get("enabled_after", datetime.now(timezone.utc).isoformat()),
-    "queue_dir": str(root / "data/workers/queues"),
-    "container_data_root": "/data",
-    "host_data_root": str(root / "data"),
-    "ledger": str(root / "overleaf/publish-ledger.jsonl"),
-    "projects": {
-        "U1": {
-            "remote": os.environ["OVERLEAF_U1_REMOTE"],
-            "source_root": str(root / "data/optimized/U1/批次数据"),
-            "target_root": "待审核",
-            "checkout": str(root / "overleaf/projects/u1"),
-        },
-        "U3": {
-            "remote": os.environ["OVERLEAF_U3_REMOTE"],
-            "source_root": str(root / "data/optimized/U3/20260808"),
-            "target_root": "待审核",
-            "checkout": str(root / "overleaf/projects/u3"),
-        },
-    },
-}
+template = json.loads(Path(os.environ["CONFIG_TEMPLATE"]).read_text(encoding="utf-8"))
+config = installation_config(template, previous, root, {
+    "U1": os.environ["OVERLEAF_U1_REMOTE"],
+    "U3": os.environ["OVERLEAF_U3_REMOTE"],
+})
 temporary = path.with_suffix(".json.tmp")
 temporary.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 temporary.replace(path)
@@ -119,8 +104,16 @@ clone_or_fetch() {
   fi
 }
 
-clone_or_fetch "$OVERLEAF_U1_REMOTE" "$projects_dir/u1"
-clone_or_fetch "$OVERLEAF_U3_REMOTE" "$projects_dir/u3"
+while IFS=$'\t' read -r remote checkout; do
+  clone_or_fetch "$remote" "$checkout"
+done < <(python3 - "$config_file" <<'PY'
+import json
+import sys
+with open(sys.argv[1], encoding="utf-8") as stream:
+    for project in json.load(stream)["projects"].values():
+        print(project["remote"], project["checkout"], sep="\t")
+PY
+)
 
 escaped_root="${deployment_root//\\/\\\\}"
 escaped_root="${escaped_root//&/\\&}"

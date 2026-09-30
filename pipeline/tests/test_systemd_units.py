@@ -62,7 +62,8 @@ def test_overleaf_installer_reads_token_from_stdin_and_keeps_it_out_of_config():
     assert "OVERLEAF_U1_REMOTE" in installer
     assert "OVERLEAF_U3_REMOTE" in installer
     assert "OVERLEAF_U2_REMOTE" not in installer
-    assert "enabled_after" in installer
+    assert "installation_config" in installer
+    assert "OVERLEAF_CONFIG_TEMPLATE" in installer
     assert "chmod 0600" in installer
     assert "systemctl enable --now pdftotex-overleaf-publish.timer" in installer
     assert "git clone --depth=1" in installer

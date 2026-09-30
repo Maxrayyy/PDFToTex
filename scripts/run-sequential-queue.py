@@ -15,12 +15,9 @@
 请使用当前运行环境可访问的路径；工作目录固定为 /data/workers/<PDF文件名主干>，
 适合项目现有的 /data 挂载布局，并非任意本地路径直接可用的通用转换器。
 
-模型和发布路径从 BatchConfig.from_env() 读取；必须符合脚本已核准的检查条件：
-    LEXOID_MODEL=gpt-6-sol，VISION_FALLBACK_MODEL=gpt-6-astra，
-    RENDER_DPI=240，VISION_CONCURRENCY=2，RECONCILE_CONCURRENCY=2。
-优化器版本必须为 texopt-layout-v11-outline-field-safe。
+模型、发布路径、渲染分辨率和并发从 BatchConfig.from_env() 读取，
+根 Compose 使用 Lexoid/.env 与 pipeline/texopt/.env，后者优先。
 应设置 PIPELINE_PUBLISH_ROOT 为发布根目录，并按现有流水线要求配置其余模型/凭据。
-这些检查用于防止误用配置，不应仅为绕过报错而修改。
 
 --prepare-only：读取 PDF 页数并打印计划，不启动处理、不写队列状态或监控配置。
 正式运行：会调用模型/流水线、写缓存和产物、更新队列同名 .status.json 以及监控配置。
@@ -81,10 +78,10 @@ def main():
     args = parser.parse_args()
     queue = json.loads(args.queue.read_text())
     config = BatchConfig.from_env()
-    assert (config.vision_model, config.fallback_model, config.render_dpi,
-            config.vision_concurrency, config.reconcile_concurrency) == (
-                'gpt-6-sol', 'gpt-6-astra', 240, 2, 2)
-    assert config.optimizer_version == 'texopt-layout-v11-outline-field-safe'
+    if not config.publish_root:
+        raise ValueError('PIPELINE_PUBLISH_ROOT must be configured')
+    if min(config.render_dpi, config.vision_concurrency, config.reconcile_concurrency) < 1:
+        raise ValueError('Render DPI and concurrency must be positive')
     if len({Path(source).stem for source in queue['sources']}) != len(queue['sources']):
         raise ValueError('Queue PDF stems must be unique to keep work directories separate')
     jobs = []

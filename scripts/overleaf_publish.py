@@ -85,6 +85,21 @@ def load_config(path: Path) -> dict:
     return config
 
 
+def installation_config(template: dict, previous: dict, root: Path, remotes: dict) -> dict:
+    config = {**template, **previous}
+    config.setdefault("enabled_after", datetime.now(timezone.utc).isoformat())
+    for key in ("queue_dir", "host_data_root", "ledger"):
+        config[key] = str(root / config[key])
+    config["projects"] = {}
+    for unit, remote in remotes.items():
+        project = {**template["projects"][unit], **previous.get("projects", {}).get(unit, {})}
+        project["remote"] = remote
+        for key in ("source_root", "checkout"):
+            project[key] = str(root / project[key])
+        config["projects"][unit] = project
+    return config
+
+
 def validate_batch(project: dict, batch_dir: Path) -> tuple[Path, list[Path]]:
     source_root = Path(project["source_root"]).resolve(strict=True)
     batch = batch_dir.resolve(strict=True)

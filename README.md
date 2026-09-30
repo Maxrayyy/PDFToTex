@@ -181,7 +181,7 @@ TEXOPT_SEMANTIC_NAMING=deferred
 | --- | --- |
 | `RECOGNITION_OCR` | 固定为 `none`；正文识别只使用视觉模型，Paddle 仅负责方向检测 |
 | `RENDER_DPI` / `RETRY_DPI` | 默认 `240` / `480` |
-| `VISION_CONCURRENCY` | Compose 默认 `4`，当前队列必须显式设置为 `2` |
+| `VISION_CONCURRENCY` | 在 `pipeline/texopt/.env` 设置；生产模板为 `2` |
 | `RECONCILE_CONCURRENCY` | 默认 `2` |
 | `PIPELINE_STAGE_TIMEOUT_SECONDS` | 代码与 Compose 默认均为 `43200` 秒，按阶段计算 |
 | `PDF_SOURCE_ROOT` | 通用扫描输入根目录，默认 `/input` |
@@ -189,7 +189,7 @@ TEXOPT_SEMANTIC_NAMING=deferred
 | `PIPELINE_PUBLISH_ROOT` | 正式 TEX 根目录，队列模式设置到当前批次 |
 | `TEXOPT_NAME_CACHE` | 默认 `/data/.cache/semantic-names.sqlite3` |
 
-优先级为 `docker compose run -e` 高于 Compose `environment`，再高于 `env_file`。例如仅在 `texopt/.env` 设置视觉并发为 2，不能覆盖 Compose 的默认 4，下面的命令显式使用 `-e`。代码或环境改变后需重建镜像/重建容器，`docker start` 仍使用旧容器配置。修改 Lexoid 依赖后，使用 `./scripts/update-lock.sh` 自动创建或复用 Poetry 环境并重生成锁文件。
+运行参数统一放在 `pipeline/texopt/.env`，该文件覆盖 `Lexoid/.env` 中的同名参数。Compose 和队列脚本不再覆盖模型、并发、DPI 或发布目录；单次运行仍可用 `docker compose run -e` 临时覆盖。代码改变后重建镜像，环境改变后重建容器；`docker start` 仍使用旧容器配置。修改 Lexoid 依赖后，使用 `./scripts/update-lock.sh` 自动创建或复用 Poetry 环境并重生成锁文件。
 
 ## 5. Docker 构建与启动
 
@@ -528,6 +528,8 @@ python3 scripts/package-overleaf-batch.py \
 输出为 `<批次号>.zip` 和 `<批次号>.zip.sha256`。ZIP 保留批次内的相对路径及 TEX 引用资源，排除 `.pipeline`、`.state`、`.cache`、环境文件、日志和 SQLite 状态。没有 Premium Git 时，在 Overleaf 网页中人工上传 ZIP。
 
 ### 10.2 既有项目自动发布
+
+运行配置为服务器的 `overleaf/config.json`，其中 `projects` 管理远端项目、源目录、检出位置及目标目录。首次安装的默认值来自 `deploy/overleaf.example.json`，可用 `OVERLEAF_CONFIG_TEMPLATE` 指定其他模板。重新安装保留已有目录和启用时间；日常修改目录直接编辑运行配置，无需修改 Python 或 Shell 脚本。
 
 服务器通过 Overleaf Git Integration 直接更新两个仍在使用的既有项目，不经过 GitHub。U2 已全部完成，不启用自动发布。目录映射如下：
 

@@ -241,6 +241,24 @@ def load_publisher():
     return module
 
 
+def test_installation_preserves_existing_paths_and_publication_start(tmp_path):
+    publisher = load_publisher()
+    template = json.loads((ROOT / "deploy/overleaf.example.json").read_text())
+    previous = {
+        "enabled_after": "2026-09-23T00:00:00+00:00",
+        "ledger": "/custom/ledger.jsonl",
+        "projects": {"U3": {"target_root": "custom/review", "checkout": "/custom/u3"}},
+    }
+    result = publisher.installation_config(template, previous, tmp_path, {"U1": "remote1", "U3": "remote3"})
+    assert result["enabled_after"] == previous["enabled_after"]
+    assert result["ledger"] == "/custom/ledger.jsonl"
+    assert result["projects"]["U3"]["target_root"] == "custom/review"
+    assert result["projects"]["U3"]["checkout"] == "/custom/u3"
+    assert result["projects"]["U3"]["remote"] == "remote3"
+    assert result["projects"]["U1"]["source_root"] == str(tmp_path / "data/optimized/U1/批次数据")
+    assert template["projects"]["U3"]["target_root"] == "待审核"
+
+
 def test_publish_rebases_and_retries_when_remote_advances(tmp_path, monkeypatch):
     publisher = load_publisher()
     source_root = tmp_path / "optimized" / "U3" / "20260808"

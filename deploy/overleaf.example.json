@@ -1,0 +1,18 @@
+{
+  "queue_dir": "data/workers/queues",
+  "container_data_root": "/data",
+  "host_data_root": "data",
+  "ledger": "overleaf/publish-ledger.jsonl",
+  "projects": {
+    "U1": {
+      "source_root": "data/optimized/U1/批次数据",
+      "target_root": "待审核",
+      "checkout": "overleaf/projects/u1"
+    },
+    "U3": {
+      "source_root": "data/optimized/U3/20260808",
+      "target_root": "待审核",
+      "checkout": "overleaf/projects/u3"
+    }
+  }
+}
