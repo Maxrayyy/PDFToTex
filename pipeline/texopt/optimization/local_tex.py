@@ -8,7 +8,7 @@ from pylatexenc.latexwalker import (LatexWalker, LatexEnvironmentNode, LatexMacr
                                    get_default_latex_context_db)
 from pylatexenc.macrospec import MacroSpec
 
-from .syntax_check import ENV_RE, _mask_verbatim
+from .syntax_check import ENV_RE, _mask_verbatim, math_boundary_tokens
 from .syntax_repair import (normalize_control_word_boundaries, normalize_math_blank_lines,
                             normalize_multicolumn_linebreaks, normalize_stray_cjk_backslashes,
                             normalize_unmatched_closing_braces,
@@ -19,7 +19,7 @@ from .tex_tables import (_peel_prefix, _read_balanced, _skip_ws, alignment_colsp
                          mask_comments, multicolumn_span, parse_colspec, split_align_body)
 
 
-VERSION = "local-tex-v7-structural-rule-boundaries"
+VERSION = "local-tex-v8-scientific-math-comments"
 SUPPORT_BEGIN = "% >>> lexoid local support >>>"
 SUPPORT_END = "% <<< lexoid local support <<<"
 
@@ -670,6 +670,47 @@ def normalize_page_boundary_closures(source):
     return source, len(edits)
 
 
+def normalize_scientific_notation(source):
+    """Keep numeric scientific notation in explicit, balanced math mode."""
+    pattern = re.compile(
+        r"(?P<wrapped>\\ensuremath\{)?(?P<coefficient>[+-]?\d+(?:\.\d+)?)\s*"
+        r"(?:x|×|\\times)\s*10\s*"
+        r"(?:\^|\\textasciicircum\{\}|\\textsuperscript)"
+        r"(?:\{(?P<braced>[+-]?\d+)\}|(?P<bare>[+-]?\d+))"
+        r"(?(wrapped)\})"
+    )
+    masked = _mask_verbatim(mask_comments(source))
+    math_arguments = []
+    for macro in re.finditer(r'\\ensuremath\s*\{', masked):
+        argument = _read_balanced(masked, macro.end() - 1, '{', '}')
+        if argument:
+            math_arguments.append((macro.end(), argument[1] - 1))
+    boundaries = iter(math_boundary_tokens(source))
+    boundary = next(boundaries, None)
+    math_mode = False
+    edits = []
+    for match in pattern.finditer(masked):
+        while boundary is not None and boundary[0] < match.start():
+            token = boundary[1]
+            if token in {'$', '$$'}:
+                math_mode = not math_mode
+            elif token in {r'\(', r'\['}:
+                math_mode = True
+            elif token in {r'\)', r'\]', r'\par', r'\LexoidPageEnd'}:
+                math_mode = False
+            boundary = next(boundaries, None)
+        formula = (match['coefficient'] + r'\times10^{' +
+                   (match['braced'] or match['bare']) + '}')
+        inside_argument = any(start <= match.start() and match.end() <= end
+                              for start, end in math_arguments)
+        replacement = formula if math_mode or inside_argument else '$' + formula + '$'
+        if replacement != match.group():
+            edits.append((match.start(), match.end(), replacement))
+    for start, end, replacement in reversed(edits):
+        source = source[:start] + replacement + source[end:]
+    return source, len(edits)
+
+
 def normalize_tex(source):
     changes = {}
     for name, operation in (
@@ -700,6 +741,7 @@ def normalize_tex(source):
         ("table_row_endings", normalize_table_row_endings),
         ("table_heading_breaks", normalize_table_heading_breaks),
         ("uniform_table_overflow", normalize_uniform_table_overflow),
+        ("scientific_notation", normalize_scientific_notation),
         ("missing_support", inject_support),
     ):
         source, count = operation(source)

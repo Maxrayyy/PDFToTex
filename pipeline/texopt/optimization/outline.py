@@ -114,13 +114,13 @@ def normalize_outline(source):
             elif isinstance(node, LatexCharsNode) and allowed:
                 offset = node.pos
                 for line in raw.splitlines(keepends=True):
-                    title = line.strip()
+                    title = mask_comments(line).strip()
                     start = offset + len(line) - len(line.lstrip())
                     match = NUMBER.match(title)
                     end = start + len(title)
                     line_end = source.find("\n", end)
                     rest = source[end:line_end if line_end != -1 else len(source)]
-                    if (match and standalone(start) and len(title) <= 60 and not rest.strip()
+                    if (match and standalone(start) and len(title) <= 60 and not mask_comments(rest).strip()
                             and not re.search(r"[;:,!?\u3002\uff1a\uff1b\uff0c\uff01\uff1f]", title)
                             and not title.endswith(".")):
                         plain_candidates.append((start, end, title, match))

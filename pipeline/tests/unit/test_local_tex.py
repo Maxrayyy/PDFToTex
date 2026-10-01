@@ -78,7 +78,7 @@ def test_handwritten_raw_superscript_stays_text_safe():
 
     source = r"\fieldvalue{\handwritten{500x10^{9}}}"
     fixed, changes = normalize_tex(source)
-    assert r"\handwritten{500x10\textsuperscript{9}}" in fixed
+    assert r"\handwritten{$500\times10^{9}$}" in fixed
     assert changes.get("handwritten_raw_superscripts") == 1
 
 

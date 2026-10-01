@@ -553,7 +553,10 @@ def normalize_text_mode_carets(source: str) -> tuple[str, int]:
     out = []
     math_mode = False
     for line in source.splitlines(keepends=True):
-        visible, sep, comment = line.partition("%")
+        # TeX consumes escaped percent signs as control symbols, not comments.
+        comment_at = next((m.start() for m in re.finditer(
+            r"\\[a-zA-Z@]+|\\[\s\S]|%", line) if m.group() == "%"), len(line))
+        visible, comment = line[:comment_at], line[comment_at:]
         pieces, cursor = [], 0
         for token in re.finditer(r"(?<!\\)\$\$?|\\\(|\\\)|\\\[|\\\]", visible):
             chunk = visible[cursor:token.start()]
@@ -573,7 +576,7 @@ def normalize_text_mode_carets(source: str) -> tuple[str, int]:
             changed += count
         else:
             chunk = MATH_ASCII_CARET.sub(replace_math_ascii_caret, chunk)
-        out.append("".join(pieces) + chunk + (sep + comment if sep else ""))
+        out.append("".join(pieces) + chunk + comment)
     repaired_source = "".join(out)
     # The scanner above treats only explicit dollar/paren delimiters as math;
     # run the ensuremath-local conversion once more so its newly formed `^`
