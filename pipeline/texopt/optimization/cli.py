@@ -979,12 +979,11 @@ def cmd_optimise(a: argparse.Namespace) -> int:
             compile_logs.append(f"LAYOUT ATTEMPT {attempt + 1}\n{compile_text}")
             if compile_ok or layout_report is None or not layout_report.get("page_map") or attempt == 2:
                 break
-            # Only compact the first overflowing source page. Later mappings may
-            # be displaced by that page without having any layout defect themselves.
+            # Output page numbers drift when extra pages are allowed. Resolve
+            # actual clipped output pages back to their source pages.
             bad = next((p["source_page"] for p in layout_report["page_map"]
-                        if p.get("start") != p["source_page"] or p.get("end") != p["source_page"]), None)
-            if bad is None and layout_report.get("outside_pages"):
-                bad = layout_report["outside_pages"][0]
+                        if any(p.get("start", 0) <= n <= p.get("end", 0)
+                               for n in layout_report.get("outside_pages", []))), None)
             if bad is None or profiles.get(bad, 0) >= 2:
                 break
             profiles[bad] = profiles.get(bad, 0) + 1

@@ -113,7 +113,8 @@ def normalize_outline(source):
                     visit(node.nodelist, allowed)
             elif isinstance(node, LatexCharsNode) and allowed:
                 offset = node.pos
-                for line in raw.splitlines(keepends=True):
+                # Masked literal environments must stay masked during title detection.
+                for line in masked[node.pos:node.pos + node.len].splitlines(keepends=True):
                     title = mask_comments(line).strip()
                     start = offset + len(line) - len(line.lstrip())
                     match = NUMBER.match(title)

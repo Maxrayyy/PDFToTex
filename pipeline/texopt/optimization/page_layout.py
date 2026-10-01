@@ -110,6 +110,7 @@ def prepare_layout(source, evidence, profiles=None):
     """Use render dimensions after orientation correction; retain all source text."""
     profiles = profiles or {}
     source = _remove_generated_layout(source)
+    source = _separate_panel_paragraphs(source)
     source = _lower_empty_cell_spacers(source)
     source, _ = canonicalize_document_terminator(source)
     markers = [(int(m[1]), int(m[2])) for m in PAGE_COMPLETED.finditer(source)]
@@ -151,6 +152,18 @@ def prepare_layout(source, evidence, profiles=None):
     report = {"schema": "page-layout/v1", "ok": False, "expected_pages": total,
               "expected_sizes": sizes, "profiles": {str(p): profiles.get(p, 0) for p in range(1, total + 1)}}
     return "".join(chunks), report
+
+
+def _separate_panel_paragraphs(source):
+    """An explicit noindent after a panel starts a paragraph, not a trailing cell."""
+    from .syntax_check import _mask_verbatim
+
+    masked = _mask_verbatim(mask_comments(source))
+    positions = [m.start('paragraph') for m in re.finditer(
+        r'\\end\s*\{(?:tabular\*?|minipage)\}\s*(?P<paragraph>\\noindent\b)', masked)]
+    for position in reversed(positions):
+        source = source[:position] + r'\par' + source[position:]
+    return source
 
 
 def _lower_empty_cell_spacers(source):

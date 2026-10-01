@@ -106,6 +106,49 @@ def test_text_outside_paper_fails_export_check_even_when_tex_compiles(tmp_path):
     assert not ok
 
 
+def test_retry_targets_clipped_source_page_after_allowed_extra_pages(tmp_path, monkeypatch):
+    source = tmp_path / 'source.tex'
+    source.write_text(SOURCE)
+    metadata = tmp_path / 'evidence.json'
+    metadata.write_text(json.dumps(evidence()))
+    attempted = []
+
+    def compile_result(*args, layout_report, **kwargs):
+        attempted.append(dict(layout_report['profiles']))
+        layout_report.update(page_map=[
+            {'source_page': 1, 'start': 1, 'end': 2},
+            {'source_page': 2, 'start': 3, 'end': 3},
+        ], outside_pages=[3] if len(attempted) == 1 else [])
+        return len(attempted) > 1, 'synthetic compiler result'
+
+    monkeypatch.setattr(cli, '_compile_latex', compile_result)
+    assert cli.main(['optimise', str(source), '-o', str(tmp_path / 'result.tex'),
+                     '--no-llm', '--page-layout-evidence', str(metadata)]) == 0
+    assert attempted == [{'1': 0, '2': 0}, {'1': 0, '2': 1}]
+
+
+@pytest.mark.parametrize('environment', ['tabular', 'minipage'])
+def test_noindent_signature_after_panel_starts_a_new_paragraph(tmp_path, environment):
+    import pypdfium2 as pdfium
+    from .page_layout import prepare_layout
+
+    panel = (r'\begin{tabular}{p{0.94\linewidth}}Form\\\end{tabular}'
+             if environment == 'tabular' else
+             r'\begin{minipage}{0.96\linewidth}Form\end{minipage}')
+    body = ('\\noindent' + panel + '\n% #VALUE_ID: SIGNATURE\n'
+            r'\noindent\hspace{0.40\linewidth}SIGNATURE Alice 2024.9.26')
+    source, report = prepare_layout(SOURCE.replace('First page body.', body), evidence())
+    target = tmp_path / 'signature.tex'
+    target.write_text(source)
+    ok, log = cli._compile_latex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    assert ok, log
+    assert not report['outside_pages']
+    doc = pdfium.PdfDocument(str(target.with_suffix('.layout.pdf')))
+    text = doc[0].get_textpage().get_text_bounded()
+    assert 'SIGNATURE Alice 2024.9.26' in text
+    doc.close()
+
+
 def test_landscape_overflow_keeps_size_until_next_source_page(tmp_path):
     from .page_layout import prepare_layout
 

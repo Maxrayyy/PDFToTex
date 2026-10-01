@@ -7,6 +7,14 @@ def document(body):
     return "\\documentclass{article}\n\\begin{document}\n" + body + "\n\\end{document}\n"
 
 
+def test_verbatim_numbered_records_are_never_rewritten_as_headings():
+    literal = '\\begin{verbatim}\n1 Session\n34 Sample\n\\end{verbatim}'
+    source = document('\\textbf{1 Summary}\n' + literal)
+    fixed, report = normalize_outline(source)
+    assert literal in fixed
+    assert report['changed'] == 1
+
+
 def test_numbered_headings_have_editor_visible_levels_and_keep_numbering():
     source = document(r"""\noindent{\large\textbf{1 Labels}}
 \noindent\textbf{1.1 Confirmation}
