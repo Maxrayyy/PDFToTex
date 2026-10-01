@@ -92,6 +92,20 @@ def test_extra_break_is_reported_but_does_not_fail_compilation(tmp_path):
     assert report["errors"]
 
 
+def test_text_outside_paper_fails_export_check_even_when_tex_compiles(tmp_path):
+    from .page_layout import prepare_layout
+
+    src = SOURCE.replace('First page body.',
+        r'\noindent\hspace*{\paperwidth}CLIPPED TEXT\par')
+    fixed, report = prepare_layout(src, evidence())
+    target = tmp_path / 'clipped.tex'
+    target.write_text(fixed)
+    ok, log = cli._compile_latex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    assert 'exit 0' in log
+    assert report['outside_pages']
+    assert not ok
+
+
 def test_landscape_overflow_keeps_size_until_next_source_page(tmp_path):
     from .page_layout import prepare_layout
 
@@ -106,6 +120,39 @@ def test_landscape_overflow_keeps_size_until_next_source_page(tmp_path):
     assert ok, log
     assert report["actual_sizes"] == pytest.approx([(842, 595), (842, 595), (595, 842)], abs=1)
     assert report["outside_pages"] == []
+
+
+@pytest.mark.parametrize("width,height", [(842, 595), (595, 842)])
+def test_margin_annotations_remain_visible_with_narrow_page_margins(tmp_path, width, height):
+    import pypdfium2 as pdfium
+    from .page_layout import prepare_layout
+
+    note = 'Signature Alice Smith 2025.12.22 '
+    src = SOURCE.replace('First page body.',
+        r'\noindent\begin{minipage}{0.46\linewidth}Left panel\end{minipage}\hfill'
+        r'\begin{minipage}{0.48\linewidth}Right panel\end{minipage}'
+        r'\marginpar[Left alternative]{' + note * 8 + '}')
+    data = evidence()
+    data['pages'][0]['render'].update(width=width, height=height)
+    fixed, report = prepare_layout(src, data)
+    target = tmp_path / 'margin-note.tex'
+    target.write_text(fixed)
+    ok, log = cli._compile_latex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    assert ok, log
+    assert report['outside_pages'] == []
+    doc = pdfium.PdfDocument(str(target.with_suffix('.layout.pdf')))
+    try:
+        text = ''
+        for page in doc:
+            textpage = page.get_textpage()
+            text += textpage.get_text_bounded()
+            textpage.close()
+            page.close()
+        assert text.count('2025.12.22') == 8
+        assert 'Left panel' in text and 'Right panel' in text
+        assert 'Left alternative' not in text
+    finally:
+        doc.close()
 
 
 @pytest.mark.parametrize("header", ["", r"\section*{Process log}\noindent Exported: 2026-09-07\par\vspace{20pt}"])

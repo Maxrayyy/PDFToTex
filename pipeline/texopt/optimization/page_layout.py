@@ -54,6 +54,10 @@ BLOCK = r"""
   \par
   \ifdim\pagetotal=0pt\null\fi
   \LexoidPageMark{#1}{end}\endgroup}
+% Narrow form margins cannot hold LaTeX's default margin-note width. Keep
+% annotations in normal paragraph flow so they can wrap and cross pages.
+\renewcommand{\marginpar}[2][]{%
+  \par\noindent\begingroup #2\par\endgroup}
 % Fixed-height boxes must report their full content size before outer fitting.
 \patchcmd{\@iiiparbox}{\setlength\@tempdimb{#2}}{%
   \setlength\@tempdimb{#2}%

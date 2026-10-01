@@ -51,7 +51,7 @@ class BatchConfig:
     retry_dpi: int = 480
     vision_concurrency: int = 4
     reconcile_concurrency: int = 2
-    optimizer_version: str = "texopt-layout-v11-outline-field-safe"
+    optimizer_version: str = "texopt-layout-v12-visible-annotations"
     timeout: int = 43200
     publish_root: str | None = None
 

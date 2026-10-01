@@ -284,7 +284,9 @@ def _compile_latex(tex_path: Path, source_dir: Path, engine: str,
                 write_utf8_atomic(tex_path.with_suffix(".layout.json"),
                                   json.dumps(layout_report, ensure_ascii=False, indent=2))
                 chunks.append("LAYOUT_CHECK: " + json.dumps(layout_report, ensure_ascii=False))
-                return pdf.stat().st_size > 0, "\n".join(chunks)
+                # Extra pages are allowed, but a successful TeX process must
+                # not hide clipped text in the exported PDF.
+                return pdf.stat().st_size > 0 and not layout_report["outside_pages"], "\n".join(chunks)
             return pdf.exists() and pdf.stat().st_size > 0, "\n".join(chunks)
     except (OSError, subprocess.TimeoutExpired) as exc:
         chunks.append(f"compile exception: {type(exc).__name__}: {exc}\n")
