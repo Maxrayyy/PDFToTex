@@ -92,6 +92,15 @@ BLOCK = r"""
 \AfterEndEnvironment{minipage}{\LexoidPanelEnd\endgroup}
 \BeforeBeginEnvironment{tabular}{\LexoidPanelBegin}
 \AfterEndEnvironment{tabular}{\LexoidPanelEnd\endgroup}
+% Resizebox collects its table in inner mode, bypassing the panel hooks above.
+\let\LexoidOriginalResizebox\resizebox
+\renewcommand{\resizebox}{\@ifstar{\LexoidResizebox{*}}{\LexoidResizebox{}}}
+\newcommand{\LexoidResizebox}[4]{%
+  \ifinner\LexoidOriginalResizebox#1{#2}{#3}{#4}%
+  \else\begingroup\LexoidPanelLimit
+    \adjustbox{max totalsize={\linewidth}{\LexoidPanelHeight},valign=t}{%
+      \LexoidOriginalResizebox#1{#2}{#3}{#4}}%
+  \endgroup\fi}
 \let\LexoidOriginalRotatebox\rotatebox
 \renewcommand{\rotatebox}[3][]{%
   \ifinner\LexoidOriginalRotatebox[#1]{#2}{#3}%

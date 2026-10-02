@@ -301,7 +301,7 @@ def test_layout_preserves_explicit_preamble_title_authors_and_date(tmp_path, aut
         document.close()
 
 
-@pytest.mark.parametrize("kind", ["tall_table", "raised_spacer", "fixed_height", "rotated_panel", "unequal_baselines"])
+@pytest.mark.parametrize("kind", ["tall_table", "raised_spacer", "fixed_height", "rotated_panel", "unequal_baselines", "resized_table", "resized_star_table"])
 def test_unbreakable_content_keeps_every_line_visible(tmp_path, kind):
     import pypdfium2 as pdfium
     from .page_layout import prepare_layout
@@ -309,6 +309,10 @@ def test_unbreakable_content_keeps_every_line_visible(tmp_path, kind):
     rows = "\n".join(rf"LINE{i:03d}\\" for i in range(45))
     if kind == "tall_table":
         body = r"\noindent\begin{tabular}{|p{0.9\linewidth}|}\hline " + rows + r"\hline\end{tabular}"
+    elif kind in {"resized_table", "resized_star_table"}:
+        star = '*' if kind == 'resized_star_table' else ''
+        body = (r'\noindent\resizebox' + star + r'{\linewidth}{!}{\begin{tabular}{l}'
+                + rows + r'\end{tabular}}')
     elif kind == "raised_spacer":
         body = (r"\noindent\begin{tabular}{|p{0.5\linewidth}|p{0.4\linewidth}|}\hline "
                 r"\rule{0pt}{0.84\textheight} & \begin{minipage}[t]{\linewidth}" + rows +
