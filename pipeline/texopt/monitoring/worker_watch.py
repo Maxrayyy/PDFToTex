@@ -469,7 +469,7 @@ def restart_delays(policy):
     return [cooldown] * limit
 
 
-def auto_restart(target, result, saved, policy, docker, now, persist):
+def auto_restart(target, result, saved, policy, docker, now, persist, notify=lambda *_: None):
     if not policy.get("enabled"):
         return
     reason = service_pause_reason(target, result)
@@ -498,6 +498,7 @@ def auto_restart(target, result, saved, policy, docker, now, persist):
     detail.update(attempts=record["attempts"], status="starting")
     # Reserve the budget before asking Docker, even if the monitor is interrupted.
     persist()
+    notify("starting", reason["error_type"])
     try:
         subprocess.run([docker, "start", result["container_id"]], check=True,
                        capture_output=True, text=True, timeout=30)
@@ -506,6 +507,7 @@ def auto_restart(target, result, saved, policy, docker, now, persist):
     except (OSError, subprocess.SubprocessError) as exc:
         record["status"] = detail["status"] = "start_failed"
         detail["restart_error_type"] = type(exc).__name__
+        notify("failed", type(exc).__name__)
 
 
 def redact_sensitive(text):
@@ -624,6 +626,91 @@ def send_email_message(settings, subject, body):
         refused = client.send_message(message)
         if refused:
             raise smtplib.SMTPRecipientsRefused(refused)
+
+
+def restart_event(saved, phase, reason, now):
+    state = saved['restart_notifications']
+    active = state['active']
+    if phase in active.setdefault('events', []):
+        return
+    active['events'].append(phase)
+    labels = {'starting': '故障后正在重启', 'succeeded': '重启成功', 'failed': '重启失败'}
+    label = labels[phase]
+    attempt = active['attempt']
+    state.setdefault('outbox', []).append({
+        'subject': f"[PDFToTex重启] {active['name']} 第{attempt}次{label}",
+        'body': redact_sensitive(
+            f"时间: {datetime.fromtimestamp(now).astimezone().isoformat(timespec='seconds')}\n"
+            f"容器: {active['name']}\nPDF: {active['stem']}\n"
+            f"本文件重启次数: {attempt}\n状态: {label}\n说明: {reason}\n"),
+        'status': 'pending', 'phase': phase, 'attempt': attempt,
+    })
+
+
+def begin_restart_notice(target, result, saved, now, reason):
+    state = saved.setdefault('restart_notifications', {})
+    counts = state.setdefault('counts', {})
+    stem = target['stem']
+    counts[stem] = counts.get(stem, 0) + 1
+    state['active'] = {
+        'name': target['name'], 'stem': stem, 'attempt': counts[stem],
+        'old_run': [result.get('container_id'), result.get('started_at')],
+        'started_at': now, 'events': [],
+    }
+    restart_event(saved, 'starting', reason, now)
+
+
+def observe_restart(target, result, saved, settings, now):
+    if result.get('status') == 'monitor_error':
+        return
+    state = saved.setdefault('restart_notifications', {})
+    run = [result.get('container_id'), result.get('started_at')]
+    previous = state.get('seen_run')
+    active = state.get('active')
+    if (previous and run[0] and run != previous
+            and (not active or 'failed' in active['events'] or 'succeeded' in active['events'])
+            and (not active or run != active.get('new_run'))):
+        begin_restart_notice(target, {'container_id': previous[0], 'started_at': previous[1]},
+                             saved, now, '监测到容器再次启动（含手动重启）')
+        active = state['active']
+    if run[0]:
+        state['seen_run'] = run
+    if not active or 'failed' in active['events']:
+        return
+    changed = run[0] and run != active['old_run']
+    if changed:
+        active['new_run'] = run
+        if result.get('status') == 'running':
+            restart_event(saved, 'succeeded', '已确认容器运行；后续任务失败仍会另行通知。', now)
+        elif result.get('status') == 'exited' and result.get('exit_code') == 0:
+            restart_event(saved, 'succeeded', '容器已完成任务并以退出码 0 结束。', now)
+        elif result.get('status') in {'exited', 'dead'}:
+            reason = f"重启后任务失败，当前 PDF: {target['stem']}，退出码: {result.get('exit_code')}"
+            restart_event(saved, 'failed', reason, now)
+    elif ('succeeded' not in active['events']
+          and now - active['started_at'] >= settings.get('restart_start_timeout_seconds', 120)):
+        restart_event(saved, 'failed', '重启后未观察到新的容器运行实例。', now)
+
+
+def send_restart_notices(saved, settings, now, *, mailer=send_email_message, persist=lambda: None):
+    if not settings.get('enabled') or not settings.get('restart_notifications', True):
+        return
+    for event in saved.get('restart_notifications', {}).get('outbox', []):
+        if event['status'] == 'sent':
+            continue
+        if now < event.get('last_attempt_at', 0) + (settings.get('retry_seconds', 600)
+                                                   if event['status'] == 'send_failed' else 0):
+            break
+        event.update(status='sending', last_attempt_at=now)
+        persist()
+        try:
+            mailer(settings, event['subject'], event['body'])
+            event.update(status='sent', sent_at=now)
+        except (OSError, ValueError, KeyError, smtplib.SMTPException) as exc:
+            event.update(status='send_failed', error_type=type(exc).__name__)
+            persist()
+            break
+        persist()
 
 
 def process_email_alert(target, result, saved, settings, docker, now, *,
@@ -786,9 +873,21 @@ def poll(config):
         for target in config["containers"]:
             target_state = saved.setdefault(target["name"], {})
             result = probe_target(target, config["docker"], target_state, now)
+            settings = config.get('email_alerts', {})
+            persist = lambda: atomic_write(state_path, json.dumps(saved, ensure_ascii=False, indent=2))
+            observe_restart(target, result, target_state, settings, now)
+
+            def notify(phase, reason):
+                if phase == 'starting':
+                    begin_restart_notice(target, result, target_state, now, reason)
+                else:
+                    restart_event(target_state, phase, reason, now)
+                persist()
+                send_restart_notices(target_state, settings, now, persist=persist)
+
             auto_restart(target, result, target_state, config.get("auto_restart", {}),
-                         config["docker"], now,
-                         lambda: atomic_write(state_path, json.dumps(saved, ensure_ascii=False, indent=2)))
+                         config["docker"], now, persist, notify)
+            send_restart_notices(target_state, settings, now, persist=persist)
             if config.get("queue_dir"):
                 result["queue"] = queue_progress(config["queue_dir"], target["name"])
             process_email_alert(
@@ -839,15 +938,39 @@ def install(config_path, config):
 
 def main():
     parser = argparse.ArgumentParser(description="定时检查识别容器、增量错误日志及发布结果")
-    parser.add_argument("action", choices=("once", "install", "stop"))
+    parser.add_argument("action", choices=("once", "install", "stop", "restart-begin", "restart-failed"))
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--scheduled", action="store_true")
+    parser.add_argument("--container")
+    parser.add_argument("--reason")
     args = parser.parse_args()
     config_path = args.config.resolve()
     config = json.loads(config_path.read_text())
     if not config.get("containers") or config.get("interval_seconds", 600) <= 0:
         parser.error("监测目标不能为空，间隔必须大于零")
-    service = f"gui/{os.getuid()}/{config['launchd_label']}"
+    if args.action in {'restart-begin', 'restart-failed'}:
+        if not args.container or not args.reason:
+            parser.error('restart notifications require --container and --reason')
+        target = next(item for item in config['containers'] if item['name'] == args.container)
+        output = Path(config['output_dir'])
+        with (output / 'monitor.lock').open('a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            path = output / 'state.json'
+            saved = json.loads(path.read_text()) if path.exists() else {}
+            state = saved.setdefault(target['name'], {})
+            now = time.time()
+            if args.action == 'restart-begin':
+                result = probe_target(target, config['docker'], state, now)
+                begin_restart_notice(target, result, state, now, args.reason)
+            else:
+                restart_event(state, 'failed', args.reason, now)
+            persist = lambda: atomic_write(path, json.dumps(saved, ensure_ascii=False, indent=2))
+            persist()
+            send_restart_notices(state, config.get('email_alerts', {}), now, persist=persist)
+            print(json.dumps({'attempt': state['restart_notifications']['active']['attempt'],
+                              'mail_status': state['restart_notifications']['outbox'][-1]['status']}))
+        return
+    service = f"gui/{os.getuid()}/{config.get('launchd_label', 'pdftotex-monitor')}"
     if args.action == "install":
         install(config_path, config)
     elif args.action == "stop":

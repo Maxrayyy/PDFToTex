@@ -173,17 +173,23 @@ def prepare_layout(source, evidence, profiles=None):
 
 
 def _separate_panel_paragraphs(source):
-    """An explicit noindent after a panel starts a paragraph, not a trailing cell."""
+    """Keep following form paragraphs below panels, including plain text lines."""
     from .syntax_check import _mask_verbatim
 
     masked = _mask_verbatim(mask_comments(source))
     declaration = (r'\\(?:tiny|scriptsize|footnotesize|small|normalsize|large|Large|LARGE|huge|Huge|'
                    r'normalfont|rmfamily|sffamily|ttfamily|mdseries|bfseries|upshape|itshape|slshape|scshape)\b')
-    positions = [m.start('paragraph') for m in re.finditer(
+    positions = {m.start('paragraph'): r'\par' for m in re.finditer(
         r'\\end\s*\{(?:tabular\*?|minipage)\}\s*(?:' + declaration
-        + r'\s*)*(?P<paragraph>\\noindent\b)', masked)]
-    for position in reversed(positions):
-        source = source[:position] + r'\par' + source[position:]
+        + r'\s*)*(?P<paragraph>\\noindent\b)', masked)}
+    # OCR form text on a new line belongs below the preceding panel. A same-line
+    # label or explicit spacing command may intentionally arrange content beside it.
+    for match in re.finditer(
+            r'\\end\s*\{(?:tabular\*?|minipage)\}[^\S\n]*\n\s*(?:'
+            + declaration + r'\s*)*(?P<paragraph>[^\W\d_])', masked):
+        positions[match.start('paragraph')] = r'\par{}'
+    for position, replacement in sorted(positions.items(), reverse=True):
+        source = source[:position] + replacement + source[position:]
     return source
 
 

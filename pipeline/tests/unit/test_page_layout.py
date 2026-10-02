@@ -174,6 +174,27 @@ def test_long_url_inside_field_macros_wraps_without_changing_characters(tmp_path
     doc.close()
 
 
+def test_plain_text_after_panel_on_next_line_starts_below_panel(tmp_path):
+    import pypdfium2 as pdfium
+    from .page_layout import prepare_layout
+
+    body = (r'\noindent\begin{tabular}{p{0.60\linewidth}}FORM\end{tabular}'
+            '\n% #VALUE_ID: SIGNATURE\nSIGNATURE Alice 2024.9.26')
+    source, report = prepare_layout(SOURCE.replace('First page body.', body), evidence())
+    target = tmp_path / 'plain-signature.tex'
+    target.write_text(source)
+    ok, log = cli._compile_latex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    assert ok, log
+    doc = pdfium.PdfDocument(str(target.with_suffix('.layout.pdf')))
+    page = doc[0].get_textpage()
+    text = page.get_text_range(force_this=True)
+    form = page.get_charbox(text.index('FORM'))
+    signature = page.get_charbox(text.index('SIGNATURE'))
+    assert signature[3] < form[1]
+    page.close()
+    doc.close()
+
+
 def test_panel_and_url_repairs_preserve_literals_and_are_repeatable():
     from .page_layout import _separate_panel_paragraphs, _wrap_text_urls
 
@@ -182,6 +203,12 @@ def test_panel_and_url_repairs_preserve_literals_and_are_repeatable():
                r'\end{minipage}\hfill\begin{minipage}{.4\linewidth}Right')
     assert _wrap_text_urls(literal) == literal
     assert _separate_panel_paragraphs(literal) == literal
+    inline = r'\end{tabular} SIGNATURE Alice'
+    assert _separate_panel_paragraphs(inline) == inline
+    plain = '\\end{tabular}\n% signature\nSIGNATURE Alice'
+    fixed_plain = _separate_panel_paragraphs(plain)
+    assert r'\par{}SIGNATURE' in fixed_plain
+    assert _separate_panel_paragraphs(fixed_plain) == fixed_plain
     original = (r'\end{tabular}\normalsize' + '\n% field\n'
                 r'\noindent\texttt{https://example.org/a\_b}')
     fixed = _wrap_text_urls(_separate_panel_paragraphs(original))

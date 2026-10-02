@@ -407,7 +407,9 @@ systemctl is-active pdftotex-realtime-monitor.timer pdftotex-daily-stats.timer
     "sender": "alerts@example.com",
     "recipient": "operator@example.com",
     "password_env": "PDFTOTEX_SMTP_PASSWORD",
-    "retry_seconds": 600
+    "retry_seconds": 600,
+    "restart_notifications": true,
+    "restart_start_timeout_seconds": 120
   },
   "containers": [{
     "name": "lexiod-new-batch", "stem": "example", "pages": 10,
@@ -453,6 +455,16 @@ launchctl bootout "gui/$(id -u)/com.pdftotex.server-monitor-sync"
 `PDFTOTEX_MONITOR_OUTPUT` 和 `PDFTOTEX_MONITOR_SYNC_INTERVAL`。
 
 邮件告警在非 API 异常退出（包括 OOM、编译失败和异常退出码）时立即发送；临时 API 错误会先自动重启，达到 `max_attempts` 后再次退出才发送。邮件包含容器和 PDF、阶段、退出码、OOM 状态、API/HTTP 错误、队列状态、阶段日志与 Docker 日志尾部。同一运行实例的同类告警只发送一次，SMTP 失败按 `retry_seconds` 重试。
+
+启用 `email_alerts.restart_notifications` 后，每次重启另发开始及结果通知，按容器内的 PDF 累计次数并保存到监控 `state.json`。成功表示已确认容器运行或正常完成；重启后再次异常退出会补发失败通知并注明第几次。通知按顺序持久化，SMTP 失败后重试。监控也会识别相同容器名的新运行实例。
+
+手动修复重启前，使用监控服务相同的 SMTP 环境执行以下命令，确保开始邮件先于重启发出。若 Docker 启动命令失败，用 `restart-failed` 及实际失败原因补充结果；正常启动的结果由下一次监控确认。`restart_start_timeout_seconds` 是等待新实例出现的上限。
+
+```bash
+python3 pipeline/texopt/monitoring/worker_watch.py restart-begin \
+  --config /srv/pdftotex/data/monitoring/realtime/config.json \
+  --container <container-name> --reason '<失败原因及本次修复>'
+```
 
 Ubuntu 将 SMTP 密码单独写入 `data/monitoring/realtime/email.env`，不得写入 JSON、仓库或 systemd unit：
 

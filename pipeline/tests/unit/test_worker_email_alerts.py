@@ -197,3 +197,86 @@ def test_smtp_uses_password_environment_without_putting_it_in_message(monkeypatc
     assert message["Date"]
     assert message["Message-ID"]
     assert "secret-value" not in message.get_content()
+
+
+def test_restart_lifecycle_counts_failures_and_sends_each_event_once(tmp_path):
+    sent, saved = [], {}
+    item = result()
+    work = target(tmp_path)
+    watch.begin_restart_notice(work, item, saved, 1000, 'compile failed')
+    watch.send_restart_notices(saved, settings(), 1000, mailer=capture_mail(sent))
+    assert '第1次' in sent[0][0] and '正在重启' in sent[0][0]
+
+    running = {**item, 'status': 'running', 'started_at': 'new-start'}
+    watch.observe_restart(work, running, saved, settings(), 1001)
+    watch.send_restart_notices(saved, settings(), 1001, mailer=capture_mail(sent))
+    assert '第1次重启成功' in sent[-1][0]
+    failed = {**running, 'status': 'exited', 'exit_code': 1}
+    watch.observe_restart(work, failed, saved, settings(), 1002)
+    watch.send_restart_notices(saved, settings(), 1002, mailer=capture_mail(sent))
+    assert '第1次重启失败' in sent[-1][0]
+    assert '退出码: 1' in sent[-1][1]
+    watch.observe_restart(work, failed, saved, settings(), 1003)
+    watch.send_restart_notices(saved, settings(), 1003, mailer=capture_mail(sent))
+    assert len(sent) == 3
+
+    watch.begin_restart_notice(work, failed, saved, 1100, 'second repair')
+    watch.restart_event(saved, 'failed', 'Docker start failed', 1101)
+    watch.send_restart_notices(saved, settings(), 1101, mailer=capture_mail(sent))
+    assert '第2次重启失败' in sent[-1][0]
+
+
+def test_restart_mail_retry_preserves_event_order_and_attempt(tmp_path):
+    saved, sent = {}, []
+    watch.begin_restart_notice(target(tmp_path), result(), saved, 1000, 'failure')
+
+    def offline(*_):
+        raise OSError('offline')
+
+    watch.send_restart_notices(saved, settings(), 1000, mailer=offline)
+    watch.restart_event(saved, 'succeeded', 'running', 1001)
+    watch.send_restart_notices(saved, settings(), 1001, mailer=capture_mail(sent))
+    assert not sent
+    watch.send_restart_notices(saved, settings(), 1601, mailer=capture_mail(sent))
+    assert len(sent) == 2
+    assert '正在重启' in sent[0][0] and '重启成功' in sent[1][0]
+    assert all('第1次' in subject for subject, _ in sent)
+
+
+def test_external_restart_and_timeout_are_observed(tmp_path):
+    work, saved = target(tmp_path), {}
+    old = result()
+    watch.observe_restart(work, old, saved, settings(), 1000)
+    assert not saved['restart_notifications'].get('outbox')
+    new = {**old, 'container_id': 'replacement', 'status': 'running'}
+    watch.observe_restart(work, new, saved, settings(), 1001)
+    state = saved['restart_notifications']
+    assert [event['phase'] for event in state['outbox']] == ['starting', 'succeeded']
+    watch.begin_restart_notice(work, new, saved, 1100, 'manual repair')
+    watch.observe_restart(work, {'status': 'monitor_error'}, saved, settings(), 1300)
+    assert state['active']['events'] == ['starting']
+    watch.observe_restart(work, new, saved, settings(), 1301)
+    assert state['active']['events'] == ['starting', 'failed']
+
+
+def test_auto_restart_notifies_before_docker_and_reports_start_failure(tmp_path, monkeypatch):
+    saved, work, item = {}, target(tmp_path), result()
+    monkeypatch.setattr(watch, 'service_pause_reason', lambda *_: {
+        'error_type': 'TimeoutError', 'page': 7, 'stage': 'recognize'})
+
+    def notify(phase, reason):
+        if phase == 'starting':
+            watch.begin_restart_notice(work, item, saved, 2000000000, reason)
+        else:
+            watch.restart_event(saved, phase, reason, 2000000000)
+
+    def fail(*_, **kwargs):
+        assert saved['restart_notifications']['outbox'][0]['phase'] == 'starting'
+        raise OSError('Docker unavailable')
+
+    monkeypatch.setattr(watch.subprocess, 'run', fail)
+    watch.auto_restart(work, item, saved, {'enabled': True, 'retry_delays_seconds': [1]},
+                       'docker', 2000000000, lambda: None, notify)
+    events = saved['restart_notifications']['outbox']
+    assert [e['phase'] for e in events] == ['starting', 'failed']
+    assert '第1次重启失败' in events[-1]['subject']
