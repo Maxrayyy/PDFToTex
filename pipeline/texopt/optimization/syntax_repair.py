@@ -290,6 +290,10 @@ def normalize_math_blank_lines(source: str) -> tuple[str, int]:
 
 def normalize_text_mode_math_symbols(source: str) -> tuple[str, int]:
     """Make standalone diagonal cancellation marks valid in text-mode fields."""
+    document = re.search(r'\\begin\s*\{document\}', _mask_verbatim(mask_comments(source)))
+    if document:
+        body, count = normalize_text_mode_math_symbols(source[document.end():])
+        return source[:document.end()] + body, count
     changed = 0
     out: list[str] = []
 
@@ -502,6 +506,11 @@ def normalize_text_mode_math_symbols(source: str) -> tuple[str, int]:
 
 def normalize_text_mode_carets(source: str) -> tuple[str, int]:
     """Escape literal text-mode carets while preserving math expressions."""
+    # Dollars in macro definitions do not establish the body's math state.
+    document = re.search(r'\\begin\s*\{document\}', _mask_verbatim(mask_comments(source)))
+    if document:
+        body, count = normalize_text_mode_carets(source[document.end():])
+        return source[:document.end()] + body, count
     changed = 0
 
     def replace_handwritten_caret(match: re.Match[str]) -> str:

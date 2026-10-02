@@ -27,6 +27,25 @@ def test_escaped_percent_does_not_hide_closing_math_delimiter():
     assert result == '$90\\%$\nplain \\textasciicircum{}{6}\n'
 
 
+def test_preamble_dollar_definition_does_not_change_body_math_state(tmp_path):
+    from texopt.recognition.page_fallback import compile_page
+
+    source = r"""\documentclass{article}
+\def\dollar{$}
+\begin{document}
+\noindent y=(x/7419.45)\textasciicircum{}1.04679
+$x\textasciicircum{}{2}$
+\end{document}
+"""
+    result, _ = normalize_text_mode_carets(source)
+    assert r'y=(x/7419.45)\textasciicircum{}1.04679' in result
+    assert r'$x^{2}$' in result
+    assert r'\def\dollar{$}' in result
+    assert normalize_text_mode_carets(result)[0] == result
+    normalized, _ = normalize_tex(source)
+    assert not compile_page(normalized, tmp_path / 'preamble-dollar')
+
+
 def test_scientific_notation_is_math_and_idempotent():
     source = r"""\documentclass{article}
 \begin{document}
