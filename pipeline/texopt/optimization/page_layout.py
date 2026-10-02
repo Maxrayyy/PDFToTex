@@ -15,8 +15,16 @@ BLOCK_END = "% <<< lexoid physical layout <<<"
 BLOCK = r"""
 % >>> lexoid physical layout >>>
 \usepackage{geometry}
-\usepackage{adjustbox,etoolbox}
+\usepackage{adjustbox,etoolbox,xurl}
 \makeatletter
+% Field arguments have already tokenized escaped URL punctuation.
+\newcommand{\LexoidTextUrl}[1]{%
+  \begingroup
+  \def\_{\detokenize{_}}\def\%{\@percentchar}%
+  \def\&{\detokenize{&}}\def\#{\expandafter\@gobble\string\#}\def\${\detokenize{$}}%
+  \edef\LexoidUrlValue{#1}%
+  \expandafter\url\expandafter{\LexoidUrlValue}%
+  \endgroup}
 % Route form symbols to the CJK font instead of Latin Modern's missing glyphs.
 \@ifpackageloaded{xeCJK}{%
   \xeCJKDeclareCharClass{CJK}{"2460 -> "2469, "25CF}}{}
@@ -111,6 +119,7 @@ def prepare_layout(source, evidence, profiles=None):
     profiles = profiles or {}
     source = _remove_generated_layout(source)
     source = _separate_panel_paragraphs(source)
+    source = _wrap_text_urls(source)
     source = _lower_empty_cell_spacers(source)
     source, _ = canonicalize_document_terminator(source)
     markers = [(int(m[1]), int(m[2])) for m in PAGE_COMPLETED.finditer(source)]
@@ -159,10 +168,33 @@ def _separate_panel_paragraphs(source):
     from .syntax_check import _mask_verbatim
 
     masked = _mask_verbatim(mask_comments(source))
+    declaration = (r'\\(?:tiny|scriptsize|footnotesize|small|normalsize|large|Large|LARGE|huge|Huge|'
+                   r'normalfont|rmfamily|sffamily|ttfamily|mdseries|bfseries|upshape|itshape|slshape|scshape)\b')
     positions = [m.start('paragraph') for m in re.finditer(
-        r'\\end\s*\{(?:tabular\*?|minipage)\}\s*(?P<paragraph>\\noindent\b)', masked)]
+        r'\\end\s*\{(?:tabular\*?|minipage)\}\s*(?:' + declaration
+        + r'\s*)*(?P<paragraph>\\noindent\b)', masked)]
     for position in reversed(positions):
         source = source[:position] + r'\par' + source[position:]
+    return source
+
+
+def _wrap_text_urls(source):
+    """Let xurl break URL-valued typewriter text even inside field arguments."""
+    from .syntax_check import _mask_verbatim
+    from .tex_tables import _read_balanced, _skip_ws
+
+    masked = _mask_verbatim(mask_comments(source))
+    edits = []
+    for match in re.finditer(r'\\texttt\b', masked):
+        start = _skip_ws(masked, match.end())
+        argument = _read_balanced(masked, start, '{', '}')
+        if argument is None:
+            continue
+        value = source[start + 1:argument[1] - 1]
+        if re.fullmatch(r'https?://(?:[^\s{}\\%]|\\[_%&#$])+', value):
+            edits.append((match.start(), match.end()))
+    for start, end in reversed(edits):
+        source = source[:start] + r'\LexoidTextUrl' + source[end:]
     return source
 
 

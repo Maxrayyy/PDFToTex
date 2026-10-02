@@ -128,14 +128,15 @@ def test_retry_targets_clipped_source_page_after_allowed_extra_pages(tmp_path, m
 
 
 @pytest.mark.parametrize('environment', ['tabular', 'minipage'])
-def test_noindent_signature_after_panel_starts_a_new_paragraph(tmp_path, environment):
+@pytest.mark.parametrize('declarations', ['', r'\normalsize', r'\small\normalfont\bfseries'])
+def test_noindent_signature_after_panel_starts_a_new_paragraph(tmp_path, environment, declarations):
     import pypdfium2 as pdfium
     from .page_layout import prepare_layout
 
     panel = (r'\begin{tabular}{p{0.94\linewidth}}Form\\\end{tabular}'
              if environment == 'tabular' else
              r'\begin{minipage}{0.96\linewidth}Form\end{minipage}')
-    body = ('\\noindent' + panel + '\n% #VALUE_ID: SIGNATURE\n'
+    body = ('\\noindent' + panel + '\n' + declarations + '\n% #VALUE_ID: SIGNATURE\n'
             r'\noindent\hspace{0.40\linewidth}SIGNATURE Alice 2024.9.26')
     source, report = prepare_layout(SOURCE.replace('First page body.', body), evidence())
     target = tmp_path / 'signature.tex'
@@ -147,6 +148,46 @@ def test_noindent_signature_after_panel_starts_a_new_paragraph(tmp_path, environ
     text = doc[0].get_textpage().get_text_bounded()
     assert 'SIGNATURE Alice 2024.9.26' in text
     doc.close()
+
+
+def test_long_url_inside_field_macros_wraps_without_changing_characters(tmp_path):
+    import pypdfium2 as pdfium
+    from .page_layout import prepare_layout
+
+    url = 'https://static.dingtalk.com/media/' + 'aB35' * 30 + '_960_1280.jpg?q=1&n=%20$2#image'
+    escaped = url
+    for char in '_&#%$':
+        escaped = escaped.replace(char, '\\' + char)
+    body = (r'\noindent\begin{tabular}{p{0.95\linewidth}}'
+            r'\hwfield{ID}{\fieldvalue{\texttt{' + escaped + r'}}}\\\end{tabular}')
+    original = SOURCE.replace(r'\begin{document}',
+        '\\newcommand{\\hwfield}[2]{#2}\n\\newcommand{\\fieldvalue}[1]{#1}\n\\begin{document}')
+    source, report = prepare_layout(original.replace('First page body.', body), evidence())
+    target = tmp_path / 'url.tex'
+    target.write_text(source)
+    ok, log = cli._compile_latex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    assert ok, log
+    assert not report['outside_pages']
+    doc = pdfium.PdfDocument(str(target.with_suffix('.layout.pdf')))
+    text = ''.join(doc[0].get_textpage().get_text_bounded().split())
+    assert url in text
+    doc.close()
+
+
+def test_panel_and_url_repairs_preserve_literals_and_are_repeatable():
+    from .page_layout import _separate_panel_paragraphs, _wrap_text_urls
+
+    literal = (r'\verb|\texttt{https://example.org/a\_b}|' + '\n'
+               r'% \end{tabular}\normalsize\noindent' + '\n'
+               r'\end{minipage}\hfill\begin{minipage}{.4\linewidth}Right')
+    assert _wrap_text_urls(literal) == literal
+    assert _separate_panel_paragraphs(literal) == literal
+    original = (r'\end{tabular}\normalsize' + '\n% field\n'
+                r'\noindent\texttt{https://example.org/a\_b}')
+    fixed = _wrap_text_urls(_separate_panel_paragraphs(original))
+    assert r'\par\noindent' in fixed
+    assert r'\LexoidTextUrl{https://example.org/a\_b}' in fixed
+    assert _wrap_text_urls(_separate_panel_paragraphs(fixed)) == fixed
 
 
 def test_landscape_overflow_keeps_size_until_next_source_page(tmp_path):
