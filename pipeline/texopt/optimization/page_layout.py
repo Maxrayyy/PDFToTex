@@ -93,22 +93,30 @@ BLOCK = r"""
 \AfterEndEnvironment{minipage}{\LexoidPanelEnd\endgroup}
 \BeforeBeginEnvironment{tabular}{\LexoidPanelBegin}
 \AfterEndEnvironment{tabular}{\LexoidPanelEnd\endgroup}
-% Resizebox collects its table in inner mode, bypassing the panel hooks above.
+\BeforeBeginEnvironment{tabular*}{\LexoidPanelBegin}
+\AfterEndEnvironment{tabular*}{\LexoidPanelEnd\endgroup}
+% Transformations must be fitted AFTER transforming, in the parent's context.
+% All supported boxes share the same outer height / inner width contract.
+\newcommand{\LexoidFitContent}[1]{%
+  \LexoidPanelBegin #1\LexoidPanelEnd\endgroup}
 \let\LexoidOriginalResizebox\resizebox
 \renewcommand{\resizebox}{\@ifstar{\LexoidResizebox{*}}{\LexoidResizebox{}}}
 \newcommand{\LexoidResizebox}[4]{%
-  \ifinner\LexoidOriginalResizebox#1{#2}{#3}{#4}%
-  \else\begingroup\LexoidPanelLimit
-    \adjustbox{max totalsize={\linewidth}{\LexoidPanelHeight},valign=t}{%
-      \LexoidOriginalResizebox#1{#2}{#3}{#4}}%
-  \endgroup\fi}
+  \LexoidFitContent{\LexoidOriginalResizebox#1{#2}{#3}{#4}}}
 \let\LexoidOriginalRotatebox\rotatebox
 \renewcommand{\rotatebox}[3][]{%
-  \ifinner\LexoidOriginalRotatebox[#1]{#2}{#3}%
-  \else\begingroup\LexoidPanelLimit
-    \adjustbox{max totalsize={\linewidth}{\LexoidPanelHeight}}{%
-      \LexoidOriginalRotatebox[#1]{#2}{#3}}%
-  \endgroup\fi}
+  \LexoidFitContent{\LexoidOriginalRotatebox[#1]{#2}{#3}}}
+\let\LexoidOriginalScalebox\scalebox
+\renewcommand{\scalebox}[1]{\@ifnextchar[{\LexoidScalebox{#1}}{\LexoidScalebox{#1}[#1]}}
+\newcommand{\LexoidScalebox}{}
+\def\LexoidScalebox#1[#2]#3{\LexoidFitContent{\LexoidOriginalScalebox{#1}[#2]{#3}}}
+\NewCommandCopy\LexoidOriginalParbox\parbox
+\RenewDocumentCommand{\parbox}{o o o m +m}{%
+  \LexoidFitContent{%
+    \IfNoValueTF{#1}{\LexoidOriginalParbox{#4}{#5}}{%
+      \IfNoValueTF{#2}{\LexoidOriginalParbox[#1]{#4}{#5}}{%
+        \IfNoValueTF{#3}{\LexoidOriginalParbox[#1][#2]{#4}{#5}}{%
+          \LexoidOriginalParbox[#1][#2][#3]{#4}{#5}}}}}}
 \makeatother
 % <<< lexoid physical layout <<<
 """
@@ -290,23 +298,39 @@ def inspect_layout(pdf_path, report):
         actual = len(document)
         sizes = []
         outside = []
+        overflow = []
         for n in range(actual):
             page = document[n]
             width, height = page.get_size()
             sizes.append((width, height))
             textpage = page.get_textpage()
+            detail = {'output_page': n + 1, 'glyph_count': 0, 'sides': [],
+                      'max_excess_bp': {}, 'samples': []}
             for i in range(textpage.count_chars()):
-                if not textpage.get_text_range(i, 1).strip():
+                char = textpage.get_text_range(i, 1)
+                if not char.strip():
                     continue
                 left, bottom, right, top = textpage.get_charbox(i)
-                if left < -1 or bottom < -1 or right > width + 1 or top > height + 1:
-                    outside.append(n + 1)
-                    break
+                excess = {side: round(value, 3) for side, value in
+                          (('left', -left), ('bottom', -bottom),
+                           ('right', right - width), ('top', top - height)) if value > 1}
+                if excess:
+                    detail['glyph_count'] += 1
+                    for side, value in excess.items():
+                        detail['max_excess_bp'][side] = max(value, detail['max_excess_bp'].get(side, 0))
+                    if len(detail['samples']) < 8:
+                        detail['samples'].append({'char': char, 'char_index': i,
+                            'bounds_bp': [round(v, 3) for v in (left, bottom, right, top)]})
+            if detail['glyph_count']:
+                detail['sides'] = sorted(detail['max_excess_bp'])
+                outside.append(n + 1)
+                overflow.append(detail)
             textpage.close()
             page.close()
     finally:
         document.close()
-    errors = validate_page_map(report["expected_pages"], records, actual)
+    pagination_errors = validate_page_map(report["expected_pages"], records, actual)
+    errors = list(pagination_errors)
     if outside:
         errors.append(f"Text extends outside PDF page bounds: {outside}")
     page_map = []
@@ -316,6 +340,9 @@ def inspect_layout(pdf_path, report):
             if number == n:
                 entry[side] = target
         page_map.append(entry)
+    for detail in overflow:
+        detail['source_pages'] = [entry['source_page'] for entry in page_map
+                                 if entry.get('start', 0) <= detail['output_page'] <= entry.get('end', 0)]
     wrong_sizes = set()
     for entry, expected_size in zip(page_map, report["expected_sizes"]):
         start, end = entry.get("start", 0), entry.get("end", 0)
@@ -330,7 +357,9 @@ def inspect_layout(pdf_path, report):
             if any(abs(a - b) > 1 for a, b in zip(pair, target)))
     if wrong_sizes:
         errors.append("Output page dimensions differ from source reading orientation")
-    report.update(ok=not errors, actual_pages=actual, actual_sizes=sizes,
+    report.update(ok=not errors, export_ok=not outside and not wrong_sizes,
+                  pagination_errors=pagination_errors, overflow=overflow,
+                  actual_pages=actual, actual_sizes=sizes,
                   page_map=page_map, errors=errors, outside_pages=outside,
                   wrong_size_pages=sorted(wrong_sizes))
     return not errors

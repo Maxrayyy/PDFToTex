@@ -361,7 +361,7 @@ repair_invariant_violations(repair_input, repaired_output):
 
 ## 阶段六：优化（`optimise`）— 7 个子步骤
 
-**源码**：`pipeline/texopt/optimization/cli.py`（`cmd_optimise`），当前版本 `texopt-layout-v11-outline-field-safe`
+**源码**：`pipeline/texopt/optimization/cli.py`（`cmd_optimise`），当前版本 `texopt-layout-v12-visible-annotations`
 
 这是最复杂的阶段，分为 7 个子步骤：
 
@@ -376,7 +376,7 @@ repair_invariant_violations(repair_input, repaired_output):
 每个源 PDF 页面在 TeX 中对应一个 `\LexoidPageStart{page}{width}{height}{profile}` ... `\LexoidPageEnd{page}` 块。
 
 - **profile 0**：正常字号 + 标准间距（用于图片/大排版页）
-- **profile 1**：10pt 字体 + 紧凑间距（用于数据页默认）
+- **profile 1**：保留字号，缩紧段落、表格和标题间距
 - **profile 2**：9pt 字体（用于溢出压缩）
 
 关键宏：
@@ -580,9 +580,12 @@ Reply with ONE snake_case English identifier (2-4 words, ASCII, no prefix)
 - 双遍 XeLaTeX 编译，`-synctex=1` 启用 SyncTeX
 - CTEX 文档类时注入 `\PassOptionsToClass{fontset=fandol}` 保证容器内字体兼容
 - 布局校验：源页码 → 编译后的页面对应关系（来自 `\LexoidPageMark` 的 `.lxp` 文件）
-- 溢出时自动压缩：`prepare_layout` 动态调整 fontsize（10pt → 9pt）或缩紧间距，最多重试 3 次
+- 越界时将输出页映射回源页，同一轮调整所有仍可调整的越界源页：先缩紧间距，再调整为 9pt；合计最多编译 3 次（初次加 2 次重试）
+- `tabular`、`tabular*`、`minipage`、`parbox`、`resizebox`、`rotatebox`、`scalebox` 使用共同的尺寸约束：变换后按父级空间限宽，外层同时限高
+- 布局报告的 `overflow` 记录输出页、源页、越界字形数、方向、最大距离及最多 8 个样本文字；`pagination_errors` 单独记录页数变化
 - 编译日志分析：提取错误/警告（`_latex_diagnostics`），兼容 `!`, `Emergency stop`, `Overfull`, `Underfull` 等
-- 两个 pass 皆成功且 `layout_check.ok == true` 才视为通过
+- 两个 pass 皆成功且 `layout_check.export_ok == true` 才视为通过；文字超出纸张或纸张尺寸错误阻止发布，允许安全的额外页。`ok` 保留严格的一对一分页检查结果
+- 历史故障、已尝试方法与验证边界见 [文字越界 issue](issues/text-overflow.md)
 
 ### 安全机制
 

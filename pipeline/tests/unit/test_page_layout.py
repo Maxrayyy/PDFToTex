@@ -89,6 +89,8 @@ def test_extra_break_is_reported_but_does_not_fail_compilation(tmp_path):
     assert report["actual_pages"] == 3
     assert report["page_map"][0] == {"source_page": 1, "start": 1, "end": 2}
     assert report["ok"] is False
+    assert report["export_ok"] is True
+    assert report["pagination_errors"]
     assert report["errors"]
 
 
@@ -104,6 +106,13 @@ def test_text_outside_paper_fails_export_check_even_when_tex_compiles(tmp_path):
     assert 'exit 0' in log
     assert report['outside_pages']
     assert not ok
+    detail = report['overflow'][0]
+    assert detail['source_pages'] == [1]
+    assert detail['sides'] == ['right']
+    assert detail['glyph_count'] > 0
+    assert detail['max_excess_bp']['right'] > 0
+    assert len(detail['samples']) <= 8
+    assert not report['export_ok']
 
 
 def test_retry_targets_clipped_source_page_after_allowed_extra_pages(tmp_path, monkeypatch):
@@ -213,6 +222,58 @@ def test_form_content_stays_inside_its_available_width(tmp_path, kind):
     ok, log = cli._compile_latex(target, tmp_path, 'xelatex', 60, layout_report=report)
     assert ok, log
     assert not report['outside_pages']
+
+
+@pytest.mark.parametrize('kind', ['scale', 'parbox', 'tabular_star', 'nested_resize', 'nested_rotate'])
+def test_box_primitives_share_layout_limits(tmp_path, kind):
+    import pypdfium2 as pdfium
+    from .page_layout import prepare_layout
+
+    rows = ''.join(rf'ROW{i:03d}\\' for i in range(35))
+    table = r'\begin{tabular}{l}' + rows + r'\end{tabular}'
+    if kind == 'scale':
+        body = r'\scalebox{3}{' + table + '}'
+    elif kind == 'parbox':
+        body = r'\parbox[t]{1.5\linewidth}{' + rows + r'\hfill RIGHT EDGE}'
+    elif kind == 'tabular_star':
+        body = (r'\begin{tabular*}{1.5\linewidth}{@{\extracolsep{\fill}}ll}'
+                + ''.join(rf'ROW{i:03d}&RIGHT EDGE\\' for i in range(35)) + r'\end{tabular*}')
+    else:
+        content = (r'\resizebox{\paperwidth}{!}{' + table + '}' if kind == 'nested_resize'
+                   else r'\rotatebox{90}{\parbox{2\paperwidth}{' + rows + '}}')
+        panel = r'\begin{minipage}{.32\linewidth}' + content + r'\end{minipage}'
+        body = r'\hfill'.join([panel] * 3)
+    fixed, report = prepare_layout(SOURCE.replace('First page body.', r'\noindent' + body), evidence())
+    target = tmp_path / 'primitives.tex'
+    target.write_text(fixed)
+    ok, log = cli._compile_latex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    assert ok, log
+    doc = pdfium.PdfDocument(str(target.with_suffix('.layout.pdf')))
+    text = ''.join(doc[i].get_textpage().get_text_bounded() for i in range(len(doc)))
+    for i in range(35):
+        assert text.count(f'ROW{i:03d}') == (3 if kind.startswith('nested') else 1)
+    doc.close()
+
+
+def test_retry_adjusts_all_clipped_source_pages_in_one_pass(tmp_path, monkeypatch):
+    source = tmp_path / 'source.tex'
+    source.write_text(SOURCE)
+    metadata = tmp_path / 'evidence.json'
+    metadata.write_text(json.dumps(evidence()))
+    attempted = []
+
+    def compile_result(*args, layout_report, **kwargs):
+        profiles = dict(layout_report['profiles'])
+        attempted.append(profiles)
+        outside = [n for n in (1, 2) if profiles[str(n)] < 2]
+        layout_report.update(page_map=[{'source_page': n, 'start': n, 'end': n} for n in (1, 2)],
+                             outside_pages=outside)
+        return not outside, 'synthetic compiler result'
+
+    monkeypatch.setattr(cli, '_compile_latex', compile_result)
+    assert cli.main(['optimise', str(source), '-o', str(tmp_path / 'result.tex'),
+                     '--no-llm', '--page-layout-evidence', str(metadata)]) == 0
+    assert attempted == [{'1': 0, '2': 0}, {'1': 1, '2': 1}, {'1': 2, '2': 2}]
 
 
 def test_panel_and_url_repairs_preserve_literals_and_are_repeatable():
@@ -463,6 +524,8 @@ def test_dimension_check_covers_spill_pages_when_page_count_differs(tmp_path):
     report = {"expected_pages": 2, "expected_sizes": [(842, 595), (595, 842)]}
     inspect_layout(pdf, report)
     assert "Output page dimensions differ from source reading orientation" in report["errors"]
+    assert report["wrong_size_pages"] == [2]
+    assert report["export_ok"] is False
 
 
 def test_layout_preserves_field_bytes_and_is_repeatable():

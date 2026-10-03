@@ -286,7 +286,7 @@ def _compile_latex(tex_path: Path, source_dir: Path, engine: str,
                 chunks.append("LAYOUT_CHECK: " + json.dumps(layout_report, ensure_ascii=False))
                 # Extra pages are allowed, but a successful TeX process must
                 # not hide clipped text in the exported PDF.
-                return pdf.stat().st_size > 0 and not layout_report["outside_pages"], "\n".join(chunks)
+                return pdf.stat().st_size > 0 and layout_report['export_ok'], "\n".join(chunks)
             return pdf.exists() and pdf.stat().st_size > 0, "\n".join(chunks)
     except (OSError, subprocess.TimeoutExpired) as exc:
         chunks.append(f"compile exception: {type(exc).__name__}: {exc}\n")
@@ -981,16 +981,18 @@ def cmd_optimise(a: argparse.Namespace) -> int:
                 break
             # Output page numbers drift when extra pages are allowed. Resolve
             # actual clipped output pages back to their source pages.
-            bad = next((p["source_page"] for p in layout_report["page_map"]
-                        if any(p.get("start", 0) <= n <= p.get("end", 0)
-                               for n in layout_report.get("outside_pages", []))), None)
-            if bad is None or profiles.get(bad, 0) >= 2:
+            bad = {p["source_page"] for p in layout_report["page_map"]
+                   if any(p.get("start", 0) <= n <= p.get("end", 0)
+                          for n in layout_report.get("outside_pages", []))}
+            adjustable = sorted(p for p in bad if profiles.get(p, 0) < 2)
+            if not adjustable:
                 break
-            profiles[bad] = profiles.get(bad, 0) + 1
+            for page in adjustable:
+                profiles[page] = profiles.get(page, 0) + 1
             out, layout_report = prepare_layout(out, layout_evidence, profiles)
             write_utf8_atomic(a.output, out)
             _event("LAYOUT_RETRY", "retrying bounded spacing adjustment",
-                   page=bad, profile=profiles[bad], attempt=attempt + 2)
+                   pages=adjustable, profiles={p: profiles[p] for p in adjustable}, attempt=attempt + 2)
         compile_text = "\n".join(compile_logs)
         if layout_report is not None:
             layout_report["attempts"] = attempt + 1
