@@ -195,6 +195,26 @@ def test_plain_text_after_panel_on_next_line_starts_below_panel(tmp_path):
     doc.close()
 
 
+@pytest.mark.parametrize('kind', ['negative_indent', 'nested_wide_table'])
+def test_form_content_stays_inside_its_available_width(tmp_path, kind):
+    from .page_layout import prepare_layout
+
+    if kind == 'negative_indent':
+        body = '\\noindent\\hspace*{-1.6cm}LEFT LABEL\\\\\n\\hspace*{-1.6cm}SECOND LABEL'
+    else:
+        panel = (r'\begin{minipage}[t]{.32\linewidth}\centering'
+                 r'\begin{tabular}{|p{.4\linewidth}|p{.4\linewidth}|}A&B\\'
+                 r'\multicolumn{2}{|l|}{A VERY LONG UNBREAKABLE PRODUCT DESCRIPTION AND ADDRESS}\\'
+                 r'\end{tabular}\end{minipage}')
+        body = r'\noindent' + r'\hfill'.join([panel] * 3)
+    source, report = prepare_layout(SOURCE.replace('First page body.', body), evidence())
+    target = tmp_path / 'width.tex'
+    target.write_text(source)
+    ok, log = cli._compile_latex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    assert ok, log
+    assert not report['outside_pages']
+
+
 def test_panel_and_url_repairs_preserve_literals_and_are_repeatable():
     from .page_layout import _separate_panel_paragraphs, _wrap_text_urls
 

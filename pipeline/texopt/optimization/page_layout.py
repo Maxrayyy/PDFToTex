@@ -82,7 +82,8 @@ BLOCK = r"""
 \newcommand{\LexoidPanelBegin}{%
   \begingroup
   \ifinner
-    \let\LexoidPanelEnd\relax
+    \def\LexoidPanelEnd{\csname end\endcsname{adjustbox}}%
+    \csname begin\endcsname{adjustbox}{max width=\linewidth,valign=t}%
   \else
     \LexoidPanelLimit
     \def\LexoidPanelEnd{\csname end\endcsname{adjustbox}}%
@@ -127,6 +128,7 @@ def prepare_layout(source, evidence, profiles=None):
     """Use render dimensions after orientation correction; retain all source text."""
     profiles = profiles or {}
     source = _remove_generated_layout(source)
+    source = _remove_negative_line_indents(source)
     source = _separate_panel_paragraphs(source)
     source = _wrap_text_urls(source)
     source = _lower_empty_cell_spacers(source)
@@ -170,6 +172,23 @@ def prepare_layout(source, evidence, profiles=None):
     report = {"schema": "page-layout/v1", "ok": False, "expected_pages": total,
               "expected_sizes": sizes, "profiles": {str(p): profiles.get(p, 0) for p in range(1, total + 1)}}
     return "".join(chunks), report
+
+
+def _remove_negative_line_indents(source):
+    """Do not reproduce cropped source edges by moving text off the new paper."""
+    from .syntax_check import _mask_verbatim
+
+    masked = _mask_verbatim(mask_comments(source))
+    document = re.search(r'\\begin\s*\{document\}', masked)
+    start = document.end() if document else 0
+    edits = list(re.finditer(
+        r'(?m)^[ \t]*(?:\\noindent\s*)?\\hspace\*?\s*\{\s*'
+        r'(?P<width>-\s*(?:\d+(?:\.\d*)?|\.\d+)\s*(?:cm|mm|in|pt|bp))\s*\}',
+        masked[start:]))
+    for match in reversed(edits):
+        left, right = match.span('width')
+        source = source[:start + left] + '0pt' + source[start + right:]
+    return source
 
 
 def _separate_panel_paragraphs(source):
