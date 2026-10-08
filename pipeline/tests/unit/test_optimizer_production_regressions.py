@@ -1,3 +1,5 @@
+import pytest
+
 from texopt.optimization.local_tex import normalize_tex
 from texopt.optimization.outline import normalize_outline
 from texopt.optimization.syntax_check import validate_latex
@@ -99,3 +101,44 @@ $90\%$\par
     normalized, _ = normalize_tex(source)
     result, _ = normalize_outline(normalized)
     assert not compile_page(result, tmp_path / 'compiled')
+
+
+@pytest.mark.parametrize('body', [
+    r'Limits: ≥ 5, ≤ 10, ≠ 0, ≈ 3, ± 1. Math: $x ≥ 5$.',
+    r'Volume: 20 μL, 30 µL, 40 uL, 50 ul. Math: $20 μL$, $30 µL$.',
+    r'Commands: \geq 5, \leq 10, \mu L.',
+    r'Other symbols: ± × ÷ Ω ∞; $± × ÷ Ω ∞$.',
+])
+def test_relations_and_microliters_render_without_missing_glyphs(tmp_path, body):
+    from texopt.recognition.page_fallback import compile_page
+
+    source = "\\documentclass{article}\n\\begin{document}\n" + body + "\n\\end{document}\n"
+    normalized, _ = normalize_tex(source)
+    directory = tmp_path / 'symbols'
+    assert not compile_page(normalized, directory)
+    log = (directory / 'compile.log').read_text(errors='replace')
+    assert 'Missing character:' not in log
+    assert normalize_tex(normalized)[0] == normalized
+
+
+def test_display_symbol_units_preserve_metadata_and_literal_content():
+    from texopt.optimization.local_tex import normalize_display_symbols
+
+    source = r'''\documentclass{article}
+% ≥ 20 μL
+\begin{document}
+% #FIELD_VALUE: ≥ 20 μL
+\verb|≥ 20 μL \geq|
+\begin{verbatim}≤ 30 µL \mu\end{verbatim}
+volume: 20uL, 30 ul, uL, μL, µL; usual result, null, sample20ul, \ul{word}.
+\geq 5 and $\mu$ and \ensuremath{2+\mu}.
+\end{document}
+'''
+    result, _ = normalize_display_symbols(source)
+    assert r'% #FIELD_VALUE: ≥ 20 μL' in result
+    assert r'\verb|≥ 20 μL \geq|' in result
+    assert r'\begin{verbatim}≤ 30 µL \mu\end{verbatim}' in result
+    assert r'20\ensuremath{\mu\mathrm{L}}, 30 \ensuremath{\mu\mathrm{L}}' in result
+    assert r'usual result, null, sample20ul, \ul{word}' in result
+    assert r'\ensuremath{2+\mu}' in result
+    assert normalize_display_symbols(result)[0] == result

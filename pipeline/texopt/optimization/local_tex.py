@@ -19,7 +19,7 @@ from .tex_tables import (_peel_prefix, _read_balanced, _skip_ws, alignment_colsp
                          mask_comments, multicolumn_span, parse_colspec, split_align_body)
 
 
-VERSION = "local-tex-v8-scientific-math-comments"
+VERSION = "local-tex-v9-display-symbols"
 SUPPORT_BEGIN = "% >>> lexoid local support >>>"
 SUPPORT_END = "% <<< lexoid local support <<<"
 
@@ -711,6 +711,48 @@ def normalize_scientific_notation(source):
     return source, len(edits)
 
 
+def normalize_display_symbols(source):
+    """Use math glyphs for scientific symbols missing from common text fonts."""
+    symbols = {
+        '≥': r'\geq', '≤': r'\leq', '≠': r'\neq', '≈': r'\approx',
+        '±': r'\pm', '×': r'\times', '÷': r'\div',
+        'μ': r'\mu', 'µ': r'\mu', 'Ω': r'\Omega', '∞': r'\infty',
+    }
+    masked = _mask_verbatim(mask_comments(source))
+    document = re.search(r'\\begin\s*\{document\}', masked)
+    start = document.end() if document else 0
+    # Uppercase uL is a unit token; lowercase ul needs a preceding quantity.
+    # Do not interpret substrings in words, IDs or control sequences as units.
+    pattern = re.compile(
+        r'\\[A-Za-z@]+|\\[\s\S]|[μµ]L(?![A-Za-z])|[' + re.escape(''.join(symbols)) + ']'
+        r'|(?<![A-Za-z0-9_\\])uL(?![A-Za-z0-9_])'
+        r'|(?P<quantity>\b\d+(?:\.\d+)?(?:[ \t]|\\[,;! ])*)'
+        r'u[lL](?![A-Za-z0-9_])'
+    )
+    math_arguments = []
+    for macro in re.finditer(r'\\ensuremath\s*\{', masked):
+        group = _read_balanced(masked, macro.end() - 1, '{', '}')
+        if group:
+            math_arguments.append((macro.end(), group[1] - 1))
+    edits = []
+    for match in pattern.finditer(masked, start):
+        token = match.group()
+        if token.startswith('\\'):
+            if token not in {r'\geq', r'\leq', r'\mu', r'\approx', r'\Omega', r'\infty'}:
+                continue
+            if any(begin <= match.start() < end for begin, end in math_arguments):
+                continue
+            replacement = r'\ensuremath{' + token + '}'
+        elif token in symbols:
+            replacement = r'\ensuremath{' + symbols[token] + '}'
+        else:
+            replacement = (match.group('quantity') or '') + r'\ensuremath{\mu\mathrm{L}}'
+        edits.append((match.start(), match.end(), replacement))
+    for begin, end, replacement in reversed(edits):
+        source = source[:begin] + replacement + source[end:]
+    return source, len(edits)
+
+
 def normalize_tex(source):
     changes = {}
     for name, operation in (
@@ -742,6 +784,7 @@ def normalize_tex(source):
         ("table_heading_breaks", normalize_table_heading_breaks),
         ("uniform_table_overflow", normalize_uniform_table_overflow),
         ("scientific_notation", normalize_scientific_notation),
+        ("display_symbols", normalize_display_symbols),
         ("missing_support", inject_support),
     ):
         source, count = operation(source)
