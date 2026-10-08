@@ -4,8 +4,17 @@ set -euo pipefail
 image="${1:-pdftotex-runtime:local}"
 platform="$(docker image inspect "$image" --format '{{.Os}}/{{.Architecture}}')"
 
-if [[ "$platform" != "linux/amd64" ]]; then
-  printf 'expected linux/amd64 image, got %s\n' "$platform" >&2
+expected="${2:-}"
+if [[ -z "$expected" ]]; then
+  architecture="$(docker info --format '{{.Architecture}}')"
+  case "$architecture" in
+    x86_64|amd64) expected=linux/amd64 ;;
+    aarch64|arm64) expected=linux/arm64 ;;
+    *) printf 'unsupported Docker architecture: %s\n' "$architecture" >&2; exit 1 ;;
+  esac
+fi
+if [[ "$platform" != "$expected" ]]; then
+  printf 'expected %s image, got %s\n' "$expected" "$platform" >&2
   exit 1
 fi
 

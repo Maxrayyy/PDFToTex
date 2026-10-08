@@ -11,7 +11,7 @@ services:
         APT_SECURITY_MIRROR: ${APT_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
         TORCH_INDEX_URL: ${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cpu}
-    image: pdftotex-runtime:local
+    image: ${PDFTOTEX_RUNTIME_IMAGE:-pdftotex-runtime:local}
     profiles: ["build"]
 
   worker:
@@ -20,8 +20,8 @@ services:
       dockerfile: pipeline/docker/Dockerfile.hybrid
       target: runtime
       args:
-        BASE_RUNTIME_IMAGE: ${BASE_RUNTIME_IMAGE:-pdftotex-runtime:local}
-    image: pdftotex:local
+        BASE_RUNTIME_IMAGE: ${BASE_RUNTIME_IMAGE:-${PDFTOTEX_RUNTIME_IMAGE:-pdftotex-runtime:local}}
+    image: ${PDFTOTEX_WORKER_IMAGE:-pdftotex:local}
     env_file:
       - Lexoid/.env
       - pipeline/texopt/.env
@@ -44,8 +44,8 @@ services:
       dockerfile: pipeline/docker/Dockerfile.hybrid
       target: test
       args:
-        BASE_RUNTIME_IMAGE: ${BASE_RUNTIME_IMAGE:-pdftotex-runtime:local}
-    image: pdftotex-test:local
+        BASE_RUNTIME_IMAGE: ${BASE_RUNTIME_IMAGE:-${PDFTOTEX_RUNTIME_IMAGE:-pdftotex-runtime:local}}
+    image: ${PDFTOTEX_TEST_IMAGE:-pdftotex-test:local}
     network_mode: none
     profiles: ["test"]
 

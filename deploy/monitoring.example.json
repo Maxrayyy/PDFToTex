@@ -1,0 +1,17 @@
+{
+  "name": "pdftotex",
+  "linux": {
+    "user": "pdftotex"
+  },
+  "jobs": {
+    "realtime-monitor": {
+      "config": "{workspace}/data/monitoring/realtime/config.json",
+      "interval_seconds": 120,
+      "environment_file": "{workspace}/data/monitoring/realtime/email.env"
+    },
+    "daily-stats": {
+      "config": "{workspace}/data/monitoring/daily/config.json",
+      "interval_seconds": 600
+    }
+  }
+}

@@ -2,9 +2,9 @@
 
 将扫描 PDF 转成可编辑 TEX 和可预览 PDF，保留字段注释、阶段日志及断点缓存，供人工核对。JSON 仅作为内部状态和兼容缓存，不是转译目标。
 
-本文按 2026-09-23 的代码与部署整理。当前采用纯视觉识别、按页升级、字段协调和 TEX 优化编译，通过 Docker 容器顺序处理指定批次。本机为 macOS / Apple Silicon；生产服务器为 Ubuntu 24.04 / x86_64，视觉模型通过远程 API 调用。
+本文按当前代码与部署整理。当前采用纯视觉识别、按页升级、字段协调和 TEX 优化编译，通过 Docker 容器顺序处理指定批次。本机为 macOS / Apple Silicon；生产服务器为 Ubuntu 24.04 / x86_64，视觉模型通过远程 API 调用。
 
-总项目通过 Git submodule 管理两个独立仓库：`Lexoid` 为识别器，`pipeline` 为优化器与流水线。Compose 项目名和镜像名为 `pdftotex`。
+总项目通过 Git submodule 管理 `Lexoid` 识别器；`pipeline` 优化器与流水线源码由总项目直接管理。Compose 项目名和镜像名为 `pdftotex`。
 
 ## 获取项目
 
@@ -71,7 +71,7 @@ flowchart TD
 5. **编译发布**：两遍 XeLaTeX 成功后发布 TEX，工作区保留编译 PDF、字段注册表、布局检查和报告。编译成功不等于内容已人工确认，手写辨识、遗漏和视觉错位仍需核对。
 6. **延后语义命名**：默认 `TEXOPT_SEMANTIC_NAMING=deferred`，先交付 TEX/PDF 与基础字段信息。命名不修改字段值或 TEX，也不重新编译。
 
-当前队列同一时刻只处理一份 PDF。主模型与升级模型共享单容器视觉并发额度 2，协调并发为 2；多个容器的额度分别计算。一个 PDF 失败时队列暂停，后续 PDF 保持待处理。
+当前队列同一时刻只处理一份 PDF。主模型与升级模型共享单容器视觉并发额度 3，协调并发为 2；多个容器的额度分别计算。一个 PDF 失败时队列暂停，后续 PDF 保持待处理。
 
 当前识别链路使用视觉模型逐页读取 PDF；Paddle/PaddleX 仅用于页面方向检测。识别结果、问题页升级、字段协调、优化和 XeLaTeX 编译均在同一条 PDF→TeX 流水线中完成。
 
@@ -181,7 +181,7 @@ TEXOPT_SEMANTIC_NAMING=deferred
 | --- | --- |
 | `RECOGNITION_OCR` | 固定为 `none`；正文识别只使用视觉模型，Paddle 仅负责方向检测 |
 | `RENDER_DPI` / `RETRY_DPI` | 默认 `240` / `480` |
-| `VISION_CONCURRENCY` | 在 `pipeline/texopt/.env` 设置；生产模板为 `2` |
+| `VISION_CONCURRENCY` | 在 `pipeline/texopt/.env` 设置；按生产配置设为 `3` |
 | `RECONCILE_CONCURRENCY` | 默认 `2` |
 | `PIPELINE_STAGE_TIMEOUT_SECONDS` | 代码与 Compose 默认均为 `43200` 秒，按阶段计算 |
 | `PDF_SOURCE_ROOT` | 通用扫描输入根目录，默认 `/input` |
@@ -195,12 +195,20 @@ TEXOPT_SEMANTIC_NAMING=deferred
 
 ### 5.1 构建和测试
 
+| 平台 | 构建与测试命令 | 默认容器架构 |
+| --- | --- | --- |
+| macOS / Apple Silicon | `./scripts/build-images.sh macos` | `linux/arm64` |
+| Linux / x86_64 | `./scripts/build-images.sh linux` | `linux/amd64` |
+
+两端使用同一组 Dockerfile、Compose 和流水线代码。Mac 使用 Docker Desktop 提供的 Linux 容器；平台默认值位于 `deploy/platforms/*.conf`。Intel Mac 使用 `PDFTOTEX_PLATFORM=linux/amd64 ./scripts/build-images.sh macos`，ARM Linux 使用 `PDFTOTEX_PLATFORM=linux/arm64 ./scripts/build-images.sh linux`。构建入口检查 Docker 引擎架构，拒绝误用不同架构；不依赖 QEMU。无参数时按宿主系统选择平台。
+
+脚本构建运行依赖、worker 和测试镜像，验证 Python 依赖、XeLaTeX、Poppler，再执行完整容器测试。测试服务禁用网络。除 `:local` 外生成 `<git-sha>-<architecture>` 标签，未提交代码带 `-dirty` 标记；版本清单位于 `../data/audits/images/<git-sha>-<architecture>.txt`。
+
+依赖未变时，可使用 `./scripts/build-images.sh macos --reuse-runtime` 或 `./scripts/build-images.sh linux --reuse-runtime`，复用并验证现有依赖镜像，重新构建 worker 与 tests。首次安装仍需完整构建。自定义镜像名用 `PDFTOTEX_RUNTIME_IMAGE`、`PDFTOTEX_WORKER_IMAGE`、`PDFTOTEX_TEST_IMAGE`；验收时可使用独立标签，保留生产 `:local`。构建不会替换运行中的容器。
+
 ```bash
-./scripts/build-images.sh
 docker compose run --rm --no-deps worker texopt-pipeline --help
 ```
-
-统一脚本只允许在 x86_64 Docker 主机执行，依次构建 `pdftotex-runtime:local`、`pdftotex:local` 和 `pdftotex-test:local`，运行完整容器测试，并额外生成带 Git SHA 的不可变标签。镜像和依赖版本清单写入 `../data/audits/images/<git-sha>.txt`。构建需要网络下载依赖；测试服务禁用网络。构建不会更新已经运行的容器。
 
 网络较慢的服务器可只对本次构建指定镜像源，不修改 Dockerfile 默认值：
 
@@ -354,36 +362,33 @@ docker rm lexiod-new-batch
 
 PDF 清单来自 `data/workers/queues/*.status.json`，只有 `status=done` 且 `exit_code=0` 才计完成。**整批完成并正常退出，或完成后手动删除的容器，只保留 PDF 清单，不再显示检测行及后续进度**。异常退出、未完成队列、发布校验异常和真正的 Docker 连接失败仍提示；容器删除不会再误报为无法连接 Docker。
 
-### 7.2 刷新、安装与停止
+### 7.2 按平台安装、查看与停止
+
+实时监控和日报仍使用各自的 `config.json`；平台调度配置单独存放，避免将机器路径写死在代码里：
 
 ```bash
-python3 pipeline/texopt/monitoring/worker_watch.py once \
-  --config ../data/monitoring/realtime/config.json
-
-# 任务未加载时安装；安装后立即检查一次
-python3 pipeline/texopt/monitoring/worker_watch.py install \
-  --config ../data/monitoring/realtime/config.json
-
-launchctl print "gui/$(id -u)/com.lexiod.worker-watch.realtime"
-
-# 只停止监控调度，不停止转换容器
-python3 pipeline/texopt/monitoring/worker_watch.py stop \
-  --config ../data/monitoring/realtime/config.json
-
-tail -n 80 ../data/monitoring/realtime/runner.error.log
+mkdir -p ../data/monitoring
+cp deploy/monitoring.example.json ../data/monitoring/scheduler.json
 ```
 
-Ubuntu 使用 systemd timer。安装器默认从仓库位置推导工作区根目录，也可通过绝对路径显式指定；生成的 unit 会记录解析后的稳定路径：
+编辑 `scheduler.json`（未启用邮箱时删除模板中的 `environment_file`）：`jobs` 可选择实时监控、日报或两者；各任务的 `config` 指向现有业务配置，`interval_seconds` 决定调度间隔。路径支持 `{workspace}`、`{repo}`，其他相对路径相对于调度配置文件。可配置 `workspace`、`python` 的绝对路径；Linux 的 `linux.user` 默认为 `pdftotex`。
 
-```bash
-sudo apt-get install -y acl
-sudo PDFTOTEX_ROOT="$(cd .. && pwd)" ./scripts/install-systemd-monitoring.sh
-systemctl is-active pdftotex-realtime-monitor.timer pdftotex-daily-stats.timer
-```
+| 操作 | macOS | Linux |
+| --- | --- | --- |
+| 安装或更新 | `python3 scripts/monitor.py macos install --config ../data/monitoring/scheduler.json` | `sudo python3 scripts/monitor.py linux install --config ../data/monitoring/scheduler.json` |
+| 查看状态 | `python3 scripts/monitor.py macos status --config ../data/monitoring/scheduler.json` | `python3 scripts/monitor.py linux status --config ../data/monitoring/scheduler.json` |
+| 手动刷新 | `python3 scripts/monitor.py macos once --config ../data/monitoring/scheduler.json` | `sudo python3 scripts/monitor.py linux once --config ../data/monitoring/scheduler.json` |
+| 停止调度 | `python3 scripts/monitor.py macos stop --config ../data/monitoring/scheduler.json` | `sudo python3 scripts/monitor.py linux stop --config ../data/monitoring/scheduler.json` |
 
-安装前需已创建 `pdftotex` 用户。安装器会为 `data/workers` 配置继承 ACL，使该用户能读取容器以 root 身份生成的 SQLite WAL 状态文件。
+`once --job realtime-monitor` 或 `once --job daily-stats` 只运行指定任务。`render --output /tmp/pdftotex-units` 可以在任意平台预览目标平台的配置文件；其余命令会校验宿主系统。`stop` 仅停止调度，不停止转换容器。
 
-所有目标均终止且无待执行自动重启时，定时监控自动卸载；以后启动新批次需再次安装。实时 plist 位于数据目录，不会像 `~/Library/LaunchAgents/` 内的文件那样在登录时自动加载。修改间隔需停止再安装，使 launchd 间隔一起更新。休眠或 Docker 暂停会推迟检查。
+macOS 将任务安装到 `~/Library/LaunchAgents`，登录后恢复；Linux 将 service/timer 安装到 `/etc/systemd/system`，开机后恢复。两端均持续监控，不因一批任务结束而自动卸载。修改调度配置后重新执行 `install`；业务配置直接在下次检查时读取。Mac 调度日志位于业务 `output_dir` 下的 `scheduler.log` 和 `scheduler.error.log`；Linux 使用 `journalctl -u pdftotex-realtime-monitor.service`。
+
+Linux 首次部署需已有 `pdftotex` 用户及 Docker 访问权限，并为 `data/workers`（包括已有 `.state` 子目录）配置继承 ACL，让服务用户能读取容器生成的 SQLite WAL 文件；可先运行已有的 `sudo PDFTOTEX_ROOT="$(cd .. && pwd)" ./scripts/install-systemd-monitoring.sh` 完成权限初始化，再执行上述新入口。新入口沿用相同 systemd 服务名，可直接更新现有安装。
+
+从旧 Mac 监控迁移时，先执行旧 `worker_watch.py stop --config ...` 和 `daily_stats.py stop --config ...`，避免旧 label 与新任务重复调度。旧入口保留兼容；新部署统一使用 `scripts/monitor.py`。
+
+邮件凭据在实时任务中通过 `environment_file` 指定（如 `{workspace}/data/monitoring/realtime/email.env`），文件采用 `KEY=value`，不执行 shell 展开。Linux 文件可保持 `root:root 0600`，由 systemd 在切换用户前读取；Mac 文件由当前用户持有并设为 `0600`。凭据不会写进 plist、日志或 Git。省略该配置时沿用当前进程环境；启用邮件前需同时配置业务文件中的 `email_alerts`。
 
 ### 7.3 配置与自动恢复
 
@@ -595,7 +600,7 @@ Overleaf token 到期或撤销后，使用新 token 重新运行安装器。安�
 | 容器退出码 1 | 查看队列状态和当前阶段日志，区分网络暂停、凭据故障和编译失败 |
 | 正式目录没有 PDF | 查看 worker 的 `.pipeline/<主干>/*.optimized.layout.pdf` |
 | 删除容器后仍有 PDF 清单 | 正常保留完成记录供核对，检测表格中已隐藏 |
-| 实时监控不再刷新 | 检查全部完成后的自动卸载、休眠和 `runner.error.log` |
+| 实时监控不再刷新 | 检查调度器状态、休眠和调度错误日志 |
 | 报告有 JSON/版式警告但显示完成 | 编译成功与内容核验不同，应对照源 PDF 检查字段和布局 |
 
 备份至少包含原始 PDF、`data/optimized`、`data/workers`（含隐藏目录）、`data/.cache`、监控配置和统计状态、总项目及两个子仓库、本地环境配置。迁移后更新宿主机绝对路径、日报价格文件路径、工作区文件与两个监控 plist，并重新加载定时任务。
