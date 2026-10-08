@@ -21,11 +21,7 @@
 .venv-poetry/bin/poetry check -C Lexoid
 ```
 
-构建运行镜像：
-
-```bash
-docker compose build worker
-```
+构建与验证 Mac/Linux 镜像时，分别执行 `./scripts/build-images.sh macos`、`./scripts/build-images.sh linux`；平台设置、依赖镜像复用和架构标签见 [README 构建章节](README.md#51-构建和测试)。
 
 构建并运行测试：
 
@@ -49,25 +45,17 @@ docker compose run --rm worker
 
 ## 启动批次转译
 
-每次启动或重启批次转译容器后，必须同时启动实时监控。监控会在所有任务结束后自动卸载，不得假定上一批次的监控仍在运行。
+每次启动或重启批次转译容器后，必须确认实时监控正在调度。平台入口、调度配置及旧任务迁移步骤见 [README 的监控章节](README.md#72-按平台安装查看与停止)。新入口持续运行，不随批次结束卸载；旧 Mac 入口可能已经自动卸载，迁移时先核对并停止旧 label。
 
-```bash
-MONITOR_CONFIG="$(pwd)/../data/monitoring/realtime/config.json"
-MONITOR_SERVICE="gui/$(id -u)/com.lexiod.worker-watch.realtime"
-
-if launchctl print "$MONITOR_SERVICE" >/dev/null 2>&1; then
-  launchctl kickstart -k "$MONITOR_SERVICE"
-else
-  python3 pipeline/texopt/monitoring/worker_watch.py install \
-    --config "$MONITOR_CONFIG"
-fi
-```
+- Mac 本机运行转换队列：`python3 scripts/monitor.py macos install --config ../data/monitoring/scheduler.json`。
+- Linux 运行转换队列：`sudo python3 scripts/monitor.py linux install --config ../data/monitoring/scheduler.json`。
+- Mac 只观察服务器：继续使用下文服务器监控/日报同步入口，保持服务器账本为唯一统计来源；不要对同一账本安装本机扫描任务。
 
 批次启动只有在以下条件全部满足后才算完成：
 
 - `docker inspect` 显示批次容器处于 `running`。
-- `launchctl print "$MONITOR_SERVICE"` 能找到实时监控服务。
-- `../data/monitoring/realtime/latest.md` 已刷新，并包含当前容器名。
+- `scripts/monitor.py macos status` 或 `scripts/monitor.py linux status`（均带 `--config`）确认对应任务已加载；Linux timer 为 `active`。
+- 业务配置 `output_dir` 下的 `latest.md` 已刷新，并包含当前容器名。
 
 如果首次监控结果显示容器已退出，应继续检查退出原因和自动重启状态，不得只报告“监控已启动”。
 
@@ -150,5 +138,4 @@ docker compose run --rm --no-deps tests
 git status --short
 git diff --check
 git -C Lexoid status --short
-git -C pipeline status --short
 ```
