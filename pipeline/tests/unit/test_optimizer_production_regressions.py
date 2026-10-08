@@ -27,6 +27,19 @@ def test_escaped_percent_does_not_hide_closing_math_delimiter():
     assert result == '$90\\%$\nplain \\textasciicircum{}{6}\n'
 
 
+def test_rowbreak_spacing_is_not_a_display_math_opener():
+    source = r'Heading\\[1em]' + '\n' + r'(p/m^{3}) and $x^{2}$'
+    result, _ = normalize_text_mode_carets(source)
+    assert result == r'Heading\\[1em]' + '\n' + r'(p/m\textasciicircum{}{3}) and $x^{2}$'
+    assert normalize_text_mode_carets(result)[0] == result
+
+
+def test_dollar_after_rowbreak_starts_math():
+    source = r'Heading\\$x^{2}$ and (p/m^{3})'
+    result, _ = normalize_text_mode_carets(source)
+    assert result == r'Heading\\$x^{2}$ and (p/m\textasciicircum{}{3})'
+
+
 def test_preamble_dollar_definition_does_not_change_body_math_state(tmp_path):
     from texopt.recognition.page_fallback import compile_page
 

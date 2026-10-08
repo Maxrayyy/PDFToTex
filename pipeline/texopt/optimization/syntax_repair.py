@@ -471,7 +471,11 @@ def normalize_text_mode_math_symbols(source: str) -> tuple[str, int]:
         visible = TEXT_MODE_ESCAPED_RELATION.sub(replace_relation, visible)
         pieces = []
         cursor = 0
-        for token in re.finditer(r"(?<!\\)\$\$?|\\\(|\\\)|\\\[|\\\]", visible):
+        # Consume control words/symbols atomically: the second slash of \\
+        # is not a display-math opener, and a following dollar is unescaped.
+        for token in re.finditer(r"\\[a-zA-Z@]+|\\[\s\S]|\$\$?", visible):
+            if token.group() not in {"$", "$$", r"\(", r"\)", r"\[", r"\]"}:
+                continue
             if not math_mode:
                 pieces.append(TEXT_MODE_MATH_SYMBOL.sub(replace, visible[cursor:token.start()]))
             else:
@@ -567,7 +571,9 @@ def normalize_text_mode_carets(source: str) -> tuple[str, int]:
             r"\\[a-zA-Z@]+|\\[\s\S]|%", line) if m.group() == "%"), len(line))
         visible, comment = line[:comment_at], line[comment_at:]
         pieces, cursor = [], 0
-        for token in re.finditer(r"(?<!\\)\$\$?|\\\(|\\\)|\\\[|\\\]", visible):
+        for token in re.finditer(r"\\[a-zA-Z@]+|\\[\s\S]|\$\$?", visible):
+            if token.group() not in {"$", "$$", r"\(", r"\)", r"\[", r"\]"}:
+                continue
             chunk = visible[cursor:token.start()]
             if not math_mode:
                 chunk, count = re.subn(r"(?<!\\)\^(?=[A-Za-z0-9{])", r"\\textasciicircum{}", chunk)

@@ -61,7 +61,11 @@ BLOCK = r"""
 \newcommand{\LexoidPageEnd}[1]{%
   \par
   \ifdim\pagetotal=0pt\null\fi
-  \LexoidPageMark{#1}{end}\endgroup}
+  % A deferred write after a full page can migrate to the next source page.
+  % Flush content in its own geometry, then record the last shipped page.
+  \clearpage
+  \immediate\write\LexoidLayoutStream{#1,end,\the\LexoidAbsolutePage}%
+  \endgroup}
 % Narrow form margins cannot hold LaTeX's default margin-note width. Keep
 % annotations in normal paragraph flow so they can wrap and cross pages.
 \renewcommand{\marginpar}[2][]{%
@@ -99,6 +103,9 @@ BLOCK = r"""
 % All supported boxes share the same outer height / inner width contract.
 \newcommand{\LexoidFitContent}[1]{%
   \LexoidPanelBegin #1\LexoidPanelEnd\endgroup}
+% A frame enters inner mode before its minipage can enforce the page height.
+\NewCommandCopy\LexoidOriginalFbox\fbox
+\renewcommand{\fbox}[1]{\LexoidFitContent{\LexoidOriginalFbox{#1}}}
 \let\LexoidOriginalResizebox\resizebox
 \renewcommand{\resizebox}{\@ifstar{\LexoidResizebox{*}}{\LexoidResizebox{}}}
 \newcommand{\LexoidResizebox}[4]{%
@@ -183,14 +190,15 @@ def prepare_layout(source, evidence, profiles=None):
 
 
 def _remove_negative_line_indents(source):
-    """Do not reproduce cropped source edges by moving text off the new paper."""
+    """Remove physical offsets that crop a line or expand its fill past paper."""
     from .syntax_check import _mask_verbatim
 
     masked = _mask_verbatim(mask_comments(source))
     document = re.search(r'\\begin\s*\{document\}', masked)
     start = document.end() if document else 0
     edits = list(re.finditer(
-        r'(?m)^[ \t]*(?:\\noindent\s*)?\\hspace\*?\s*\{\s*'
+        r'(?m)(?:^[ \t]*(?:\\noindent\s*)?|\\(?:dotfill|hrulefill|hfill)\b\s*)'
+        r'\\hspace\*?\s*\{\s*'
         r'(?P<width>-\s*(?:\d+(?:\.\d*)?|\.\d+)\s*(?:cm|mm|in|pt|bp))\s*\}',
         masked[start:]))
     for match in reversed(edits):

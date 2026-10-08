@@ -384,7 +384,7 @@ repair_invariant_violations(repair_input, repaired_output):
 | 宏 | 功能 |
 |----|------|
 | `\LexoidPageStart` | `\clearpage` + `\newgeometry{...}` + 设置字号/间距 |
-| `\LexoidPageEnd` | `\par` + `\endgroup` |
+| `\LexoidPageEnd` | 当前几何设置下清页，再立即记录最后输出页码，结束分组；避免延迟写入漂移到下一源页 |
 | `\LexoidPanelBegin`/`\End` | `adjustbox` 包裹可溢出面板，`max totalsize={\linewidth}{\remaining}` |
 | `\LexoidPageMark` | 写入 `.lxp` 布局日志，记录每页 start/end 和绝对页码 |
 

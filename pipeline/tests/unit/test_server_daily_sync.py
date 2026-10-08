@@ -1,6 +1,41 @@
 import json
+import subprocess
+from pathlib import Path
 
 import pytest
+
+
+def test_stalled_transfer_is_bounded_and_preserves_ledger(tmp_path, monkeypatch):
+    from texopt.monitoring.server_daily_sync import sync_ledger
+
+    local = tmp_path / 'completions.jsonl'
+    original = json.dumps(record('old', '2026-10-02')) + '\n'
+    local.write_text(original)
+
+    def stalled(command, *, check, timeout):
+        assert timeout == 0.1
+        assert 'ServerAliveInterval=15' in command
+        Path(command[-1]).write_text('partial download')
+        raise subprocess.TimeoutExpired(command, timeout)
+
+    monkeypatch.setattr(subprocess, 'run', stalled)
+    with pytest.raises(subprocess.TimeoutExpired):
+        sync_ledger({'output_dir': str(tmp_path),
+                     'server_sync': {'transfer_timeout_seconds': 0.1}},
+                    'example', Path('/ledger'), '2026-09-25')
+    assert local.read_text() == original
+    assert list(tmp_path.iterdir()) == [local]
+
+
+def test_successful_transfer_adds_new_day(tmp_path, monkeypatch):
+    from texopt.monitoring.server_daily_sync import sync_ledger
+
+    def download(command, **kwargs):
+        Path(command[-1]).write_text(json.dumps(record('new', '2026-10-03')) + '\n')
+
+    monkeypatch.setattr(subprocess, 'run', download)
+    records = sync_ledger({'output_dir': str(tmp_path)}, 'example', Path('/ledger'), '2026-09-25')
+    assert records == [record('new', '2026-10-03')]
 
 
 def record(identifier, date):

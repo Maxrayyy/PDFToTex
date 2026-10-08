@@ -75,6 +75,32 @@ def test_comment_only_source_page_still_produces_one_pdf_page(tmp_path):
     ]
 
 
+@pytest.mark.parametrize('fraction', [.85, .9, .95, 1.0])
+def test_end_marker_stays_with_full_page_before_orientation_change(tmp_path, fraction):
+    from .page_layout import prepare_layout
+
+    body = rf'\begin{{center}}\rule{{1pt}}{{{fraction}\textheight}} END\end{{center}}'
+    fixed, report = prepare_layout(SOURCE.replace('First page body.', body), evidence())
+    target = tmp_path / 'page-end.tex'
+    target.write_text(fixed)
+    ok, log = cli._compile_latex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    assert ok, log
+    assert report['page_map'][0]['end'] < report['page_map'][1]['start']
+
+
+def test_negative_offset_after_leader_does_not_extend_past_paper(tmp_path):
+    from .page_layout import prepare_layout
+
+    body = r'\noindent\dotfill\hspace{-5cm}SIGNATURE\par'
+    fixed, report = prepare_layout(SOURCE.replace('First page body.', body), evidence())
+    target = tmp_path / 'leader.tex'
+    target.write_text(fixed)
+    ok, log = cli._compile_latex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    assert ok, log
+    assert r'\dotfill\hspace{0pt}SIGNATURE' in fixed
+    assert prepare_layout(fixed, evidence())[0] == fixed
+
+
 def test_extra_break_is_reported_but_does_not_fail_compilation(tmp_path):
     from .page_layout import prepare_layout
 
@@ -224,14 +250,17 @@ def test_form_content_stays_inside_its_available_width(tmp_path, kind):
     assert not report['outside_pages']
 
 
-@pytest.mark.parametrize('kind', ['scale', 'parbox', 'tabular_star', 'nested_resize', 'nested_rotate'])
+@pytest.mark.parametrize('kind', ['scale', 'parbox', 'tabular_star', 'nested_resize', 'nested_rotate', 'framed'])
 def test_box_primitives_share_layout_limits(tmp_path, kind):
     import pypdfium2 as pdfium
     from .page_layout import prepare_layout
 
-    rows = ''.join(rf'ROW{i:03d}\\' for i in range(35))
+    row_count = 70 if kind == 'framed' else 35
+    rows = ''.join(rf'ROW{i:03d}\\' for i in range(row_count))
     table = r'\begin{tabular}{l}' + rows + r'\end{tabular}'
-    if kind == 'scale':
+    if kind == 'framed':
+        body = r'\fbox{\begin{minipage}{.96\linewidth}' + table + r'\end{minipage}}'
+    elif kind == 'scale':
         body = r'\scalebox{3}{' + table + '}'
     elif kind == 'parbox':
         body = r'\parbox[t]{1.5\linewidth}{' + rows + r'\hfill RIGHT EDGE}'
@@ -250,7 +279,7 @@ def test_box_primitives_share_layout_limits(tmp_path, kind):
     assert ok, log
     doc = pdfium.PdfDocument(str(target.with_suffix('.layout.pdf')))
     text = ''.join(doc[i].get_textpage().get_text_bounded() for i in range(len(doc)))
-    for i in range(35):
+    for i in range(row_count):
         assert text.count(f'ROW{i:03d}') == (3 if kind.startswith('nested') else 1)
     doc.close()
 

@@ -6,6 +6,8 @@ import argparse
 from datetime import date
 import json
 from pathlib import Path
+import subprocess
+import tempfile
 
 if __package__:
     from .daily_stats import poll, read_json
@@ -74,18 +76,41 @@ def merge_ledger(local_path: Path, remote_path: Path, start_date: str) -> list[d
     return merged
 
 
+def sync_ledger(config: dict, server: str, remote_path: Path, start_date: str) -> list[dict]:
+    output = Path(config['output_dir'])
+    output.mkdir(parents=True, exist_ok=True)
+    timeout = float(config.get('server_sync', {}).get('transfer_timeout_seconds', 90))
+    if not 0 < timeout < float('inf'):
+        raise ValueError('transfer_timeout_seconds must be finite and positive')
+    # Bound the entire transfer: ConnectTimeout only covers the SSH handshake.
+    with tempfile.TemporaryDirectory(prefix='.server-sync-', dir=output) as temporary:
+        downloaded = Path(temporary) / 'completions.jsonl'
+        subprocess.run([
+            '/usr/bin/scp', '-q', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15',
+            '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=2',
+            f'{server}:{remote_path}', str(downloaded),
+        ], check=True, timeout=timeout)
+        if not downloaded.stat().st_size:
+            raise ValueError('empty server daily ledger')
+        return merge_ledger(output / 'completions.jsonl', downloaded, start_date)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True, type=Path)
     parser.add_argument("--remote-ledger", required=True, type=Path)
     parser.add_argument("--start-date", required=True)
+    parser.add_argument("--server")
     args = parser.parse_args()
 
     config = read_json(args.config)
     output = Path(config["output_dir"])
-    records = merge_ledger(
-        output / "completions.jsonl", args.remote_ledger, args.start_date
-    )
+    if args.server:
+        records = sync_ledger(config, args.server, args.remote_ledger, args.start_date)
+    else:
+        records = merge_ledger(
+            output / "completions.jsonl", args.remote_ledger, args.start_date
+        )
     render_config = dict(config)
     render_config["scan_roots"] = []
     snapshot = poll(render_config)
