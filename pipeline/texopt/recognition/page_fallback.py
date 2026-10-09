@@ -175,7 +175,7 @@ class PageFallback:
     def __call__(self, result, total, gate=None):
         from lexoid.core.request_errors import ModelUnavailableError, is_request_failure, is_request_failure_name
         from lexoid.core.model_telemetry import call_context
-        from lexoid.core.recognition.models import FieldEvidence, VisionPageResult
+        from lexoid.core.recognition.models import FieldEvidence, VisionPageResult, RenderMetadata
         from lexoid.core.recognition.vision import RecoverableVisionError, validate_page_checkpoint
 
         number, original = result.page, result.latex
@@ -222,17 +222,23 @@ class PageFallback:
                   "codes": [i.code for i in errors], "action": "recognize_original_image"})
             try:
                 page = self.renderer(self.source, number, self.dpi, self.auto_orient)
+                render = RenderMetadata(page.dpi, page.width, page.height, page.rotation,
+                                        page.deskew, page.source_size)
+                changed = render != result.evidence.render
+                fallback_evidence = replace(result.evidence, render=render, fields=(),
+                    ocr_blocks=() if changed else result.evidence.ocr_blocks,
+                    tables=() if changed else result.evidence.tables)
                 with gate.slot() if gate else nullcontext():
                     with call_context(stage="recognize", page=number, attempt=2,
                                       fallback_from=self.primary):
                         try:
-                            candidate = self.recognize(page, replace(result.evidence, fields=()), total)
+                            candidate = self.recognize(page, fallback_evidence, total)
                         except RecoverableVisionError as exc:
                             if exc.fallback is None:
                                 raise
                             candidate = exc.fallback
                 validate_page_checkpoint(candidate.latex, number, total)
-                record.update(status="returned", latex=candidate.latex,
+                record.update(status="returned", latex=candidate.latex, render=render.to_dict(),
                               fields=[f.to_dict() for f in candidate.fields])
                 write_utf8_atomic(directory / "fallback.tex", candidate.latex)
             except Exception as exc:
@@ -260,8 +266,12 @@ class PageFallback:
                     self.preamble = get_preamble(candidate.latex)
                 emit({"event": "page_upgrade_finish", "stage": "recognize", "page": number,
                       "model": self.model, "action": "use_fallback_tex"})
+                render = RenderMetadata.from_dict(record.get("render", result.evidence.render.to_dict()))
+                changed = render != result.evidence.render
                 return replace(result, latex=candidate.latex,
-                               evidence=replace(result.evidence, fields=candidate.fields))
+                    evidence=replace(result.evidence, render=render, fields=candidate.fields,
+                        ocr_blocks=() if changed else result.evidence.ocr_blocks,
+                        tables=() if changed else result.evidence.tables))
         self.report["unresolved"].append(number)
         emit({"event": "page_upgrade_finish", "stage": "recognize", "page": number,
               "model": self.model, "action": "keep_original_tex", "status": record["status"]})

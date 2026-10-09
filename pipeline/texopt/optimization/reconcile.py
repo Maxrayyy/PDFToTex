@@ -281,6 +281,13 @@ def render_crop(source_pdf, candidate, retry_dpi, *, full_page=False, with_detai
             document.close()
     if rotation:
         image = image.rotate(rotation, expand=True)
+    deskew = candidate.render.get("deskew", 0.0)
+    if type(deskew) not in (int, float) or not -20 <= deskew <= 20:
+        raise ValueError("Unsupported page deskew")
+    if deskew:
+        from PIL import Image
+        image = image.rotate(deskew, resample=Image.Resampling.BICUBIC,
+                             expand=True, fillcolor="white")
     factor = retry_dpi / candidate.render["dpi"]
     x0, y0, x1, y1 = ([0, 0, candidate.render['width'], candidate.render['height']]
                        if full_page else candidate.field["bbox"])

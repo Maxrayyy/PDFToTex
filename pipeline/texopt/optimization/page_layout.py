@@ -159,6 +159,12 @@ def prepare_layout(source, evidence, profiles=None):
     for page in pages:
         render = page["render"]
         dpi, width, height = (float(render[k]) for k in ("dpi", "width", "height"))
+        # Deskew expands the recognition canvas, not the physical paper.
+        if "source_size" in render:
+            original = render["source_size"]
+            if not isinstance(original, (list, tuple)) or len(original) != 2:
+                raise ValueError("Invalid source page dimensions")
+            width, height = map(float, original)
         if not all(math.isfinite(x) and x > 0 for x in (dpi, width, height)):
             raise ValueError("Invalid page dimensions")
         sizes.append((round(width * 72 / dpi, 3), round(height * 72 / dpi, 3)))

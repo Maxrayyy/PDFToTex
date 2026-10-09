@@ -209,3 +209,29 @@ def test_cli_streams_checked_results_into_tex_and_matching_evidence(tmp_path, mo
     assert payload["page_models"]["3"] == "gpt-6-astra"
     assert payload["page_fallback"]["upgraded"] == [3]
     assert [p["page"] for p in payload["pages"]] == [1, 2, 3]
+
+
+def test_upgrade_and_cached_replay_use_new_render_geometry(tmp_path):
+    from texopt.recognition.page_fallback import PageFallback
+    from lexoid.core.recognition.models import PageRecognitionResult, OcrBlock
+    source, _, _ = sample(tmp_path)
+    old = PageEvidence("recognition/v1", 3, RenderMetadata(240, 100, 200),
+                       ocr_blocks=(OcrBlock("old position", (5, 5, 20, 20), .9),))
+    result = PageRecognitionResult(3, BROKEN + "% LEXOID_PAGE_COMPLETED: 3/3", old, "key")
+    calls = []
+    def recognize(page, evidence, total):
+        calls.append(1)
+        assert evidence.render.deskew == 12
+        assert (evidence.render.width, evidence.render.height) == page.image.size
+        assert evidence.ocr_blocks == ()
+        return VisionPageResult(3, "fixed\n% LEXOID_PAGE_COMPLETED: 3/3", ())
+    options = dict(source=source, cache_dir=tmp_path / "cache", primary_model="primary",
+        fallback_model="fallback", recognize=recognize, compiler=lambda *_: [],
+        renderer=lambda _, page, dpi, auto: RenderedPage(page, dpi, 140, 220,
+            Image.new("RGB", (140, 220)), deskew=12, source_size=(100, 200)))
+    for _ in range(2):
+        output = PageFallback(**options)(result, 3)
+        assert output.evidence.render.deskew == 12
+        assert output.evidence.render.source_size == (100, 200)
+        assert output.evidence.ocr_blocks == ()
+    assert len(calls) == 1

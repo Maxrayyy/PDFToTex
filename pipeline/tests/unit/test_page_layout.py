@@ -617,3 +617,12 @@ def test_pipeline_accepts_compile_success_without_strict_layout_validation(tmp_p
     report.write_text(json.dumps({"compile_check": {"ok": True, "passes": 2}}))
     stage = StageCommand("optimise", [], (), (tex, report), "test")
     _validate(stage, 1)
+
+
+def test_deskew_expanded_canvas_does_not_change_paper_size():
+    from texopt.optimization.page_layout import prepare_layout
+    ev = evidence()
+    expected, _ = prepare_layout(SOURCE, ev)
+    ev["pages"][0]["render"].update(width=970, height=795, deskew=15, source_size=[842, 595])
+    actual, _ = prepare_layout(SOURCE, ev)
+    assert actual == expected

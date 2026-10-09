@@ -306,3 +306,35 @@ def test_crop_uses_installed_pdfium_api(tmp_path):
         document.close()
     candidate = select_exceptional_fields(TEX, evidence())[0]
     assert render_crop(source, candidate, 480).startswith("data:image/png;base64,")
+
+
+@pytest.mark.parametrize("rotation", [0, 90, 180, 270])
+def test_crop_replays_deskew_in_recognized_coordinate_system(tmp_path, rotation):
+    import base64
+    import io
+    from PIL import Image, ImageDraw
+    import numpy as np
+    from lexoid.core.recognition.rendering import render_pdf_page
+
+    source = Image.new("RGB", (600, 900), "white")
+    ImageDraw.Draw(source).rectangle((420, 120, 460, 160), fill="blue")
+    path = tmp_path / "source.pdf"
+    source.save(path, "PDF", resolution=240)
+    # Use the real PDF renderer, then record the same geometry as recognition.
+    rendered = render_pdf_page(path, 1, 240, auto_orient=False)
+    image = rendered.image.rotate(rotation, expand=True).rotate(
+        12, resample=Image.Resampling.BICUBIC, expand=True, fillcolor="white")
+    pixels = np.asarray(image)
+    ys, xs = np.where((pixels[:, :, 2] > 180) & (pixels[:, :, 0] < 80))
+    ev = evidence()
+    ev["pages"][0]["render"] = {"dpi": 240, "width": image.width,
+        "height": image.height, "rotation": rotation, "deskew": 12}
+    ev["pages"][0]["fields"][0]["bbox"] = [int(xs.min()-2), int(ys.min()-2),
+                                               int(xs.max()+3), int(ys.max()+3)]
+    candidate = select_exceptional_fields(TEX, ev)[0]
+    url = render_crop(path, candidate, 480)
+    crop = np.asarray(Image.open(io.BytesIO(base64.b64decode(url.split(",", 1)[1]))))
+    cy, cx = np.where((crop[:, :, 2] > 180) & (crop[:, :, 0] < 80))
+    assert len(cx) > 5000  # Field survives the transformed, higher-resolution crop.
+    assert abs(cx.mean() - crop.shape[1]/2) < 3
+    assert abs(cy.mean() - crop.shape[0]/2) < 3
