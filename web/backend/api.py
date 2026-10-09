@@ -505,6 +505,8 @@ def create_app(config=None):
     dist = ROOT / "web/frontend/dist"
     if (dist / "assets").is_dir():
         app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
+        if (dist / "pdfjs").is_dir():
+            app.mount("/pdfjs", StaticFiles(directory=dist / "pdfjs"), name="pdfjs")
 
         @app.get("/{path:path}")
         def frontend(path: str):

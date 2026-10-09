@@ -1991,7 +1991,12 @@ function Preview({
         api<Job>("/jobs/" + a.job).then(setJob);
       })
       .catch((e) => setError(String(e)));
-    const loading = pdfjs.getDocument("/api/artifacts/" + id + "/file");
+    const loading = pdfjs.getDocument({
+      url: "/api/artifacts/" + id + "/file",
+      cMapUrl: "/pdfjs/cmaps/",
+      cMapPacked: true,
+      standardFontDataUrl: "/pdfjs/standard_fonts/",
+    });
     loading.promise
       .then((d) => {
         document.current = d;
