@@ -7,3 +7,9 @@ __pycache__/
 .pytest_cache/
 .venv/
 .venv-poetry/
+web/frontend/node_modules/
+web/frontend/dist/
+web/frontend/test-results/
+web/frontend/playwright-report/
+.venv-web/
+web/frontend/*.tsbuildinfo

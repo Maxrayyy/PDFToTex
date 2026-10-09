@@ -606,3 +606,10 @@ Overleaf token 到期或撤销后，使用新 token 重新运行安装器。安�
 | 报告有 JSON/版式警告但显示完成 | 编译成功与内容核验不同，应对照源 PDF 检查字段和布局 |
 
 备份至少包含原始 PDF、`data/optimized`、`data/workers`（含隐藏目录）、`data/.cache`、监控配置和统计状态、总项目及两个子仓库、本地环境配置。迁移后更新宿主机绝对路径、日报价格文件路径、工作区文件与两个监控 plist，并重新加载定时任务。
+
+
+## 可选 Web 工作台（独立入口）
+
+新增工作台支持 PDF/文件夹上传与持久队列、供应商及模型配置、源页进度和 Token、独立 XeLaTeX 编译，以及可直接打开的 PDF 预览。Web 默认页并发为 1，同时只处理一个文件；原 CLI、根 Compose、服务器队列及监控继续使用原方式。
+
+安装、启动与配置见 [web/README.md](web/README.md)，配置模板见 [deploy/web.example.json](deploy/web.example.json)。Web 使用独立 `data/web` 数据目录，不接管已有任务。历史产物与报告可通过配置只读接入。

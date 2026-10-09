@@ -1,0 +1,30 @@
+{
+  "data_root": "../data/web",
+  "image": "pdftotex:local",
+  "docker": "docker",
+  "page_concurrency": 1,
+  "max_page_concurrency": 8,
+  "min_free_bytes": 2147483648,
+  "max_upload_bytes": 2147483648,
+  "compile_timeout": 180,
+  "conversion_timeout": 43200,
+  "memory": "4g",
+  "cpus": 2,
+  "poll_seconds": 2,
+  "retry_delays": [
+    180,
+    360,
+    720,
+    1440,
+    2880,
+    5760
+  ],
+  "timezone": "Asia/Shanghai",
+  "batch_aliases": {},
+  "monitor_snapshot": null,
+  "daily_report": null,
+  "legacy_queue_status": [],
+  "overleaf_config": null,
+  "email": null,
+  "legacy_artifact_roots": {}
+}
