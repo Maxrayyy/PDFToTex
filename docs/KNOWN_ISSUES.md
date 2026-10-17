@@ -19,6 +19,7 @@
 - [日报扫描耗尽文件句柄](issues/daily-stats-open-files.md)
 - [日报同步传输挂起](issues/daily-sync-stalled.md)
 - [整页复核重复消耗与调用明细](issues/reconcile-full-page-cost.md)
+- [复选框与文字的垂直对齐](issues/checkbox-baseline.md)
 
 ## 必须遵守的规则
 

@@ -40,16 +40,27 @@ BLOCK = r"""
 %% sources used \checkboxfield{ID}{state}{label}; retain both forms during migration.
 \def\cb@checked{checked}
 \def\cb@unclear{unclear}
+\newcommand{\cb@box}[1]{%
+  \begingroup
+  \setlength{\fboxsep}{0.15ex}%
+  % All states use one fixed square; centre the mark independently of its glyph.
+  % The math axis follows the surrounding font size and prevents raised boxes.
+  \ensuremath{\vcenter{\hbox{\fbox{%
+    \rule[-0.625ex]{0pt}{1.25ex}%
+    \makebox[1.25ex][c]{%
+      \raisebox{\dimexpr-.5\height+.5\depth\relax}[0pt][0pt]{%
+        \fontsize{0.65em}{0.65em}\selectfont\sffamily #1}}}}}}%
+  \endgroup}
 \newcommand{\cb@draw}[1]{%
   \begingroup
     \setlength{\fboxsep}{0.15ex}%
     \def\cb@state{#1}%
     \ifx\cb@state\cb@checked
-      \fbox{\rule{0pt}{1.25ex}\makebox[1.25ex][c]{\scriptsize\ensuremath{\checkmark}}}%
+      \cb@box{\ensuremath{\checkmark}}%
     \else\ifx\cb@state\cb@unclear
-      \fbox{\rule{0pt}{1.25ex}\makebox[1.25ex][c]{\scriptsize\sffamily ?}}%
+      \cb@box{?}%
     \else
-      \fbox{\rule{0pt}{1.25ex}\makebox[1.25ex][c]{}}%
+      \cb@box{}%
     \fi\fi
   \endgroup}
 \providecommand{\checkboxfield}[1]{}%
