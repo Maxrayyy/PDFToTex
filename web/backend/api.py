@@ -1,7 +1,7 @@
 """HTTP commands and queries. Conversion runs in the separate worker process."""
 
 import fcntl
-import io
+import os
 import json
 from pathlib import Path
 import time
@@ -10,10 +10,33 @@ import tempfile
 from starlette.background import BackgroundTask
 import httpx
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from .store import Store, load_config, atomic_json, ROOT, ACTIVE, uid
 from .observations import snapshot, redact
+
+
+def archive_response(root, filename, traceability, files):
+    """Build a download and remove its temporary ZIP on failure or after sending."""
+    fd, path = tempfile.mkstemp(suffix=".zip", dir=root)
+    os.close(fd)
+    try:
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(
+                "traceability.json",
+                json.dumps(traceability, ensure_ascii=False, indent=2),
+            )
+            for source, name in files:
+                archive.write(source, name)
+    except Exception:
+        Path(path).unlink(missing_ok=True)
+        raise
+    return FileResponse(
+        path,
+        media_type="application/zip",
+        filename=filename,
+        background=BackgroundTask(Path(path).unlink, missing_ok=True),
+    )
 
 
 def create_app(config=None):
@@ -378,37 +401,21 @@ def create_app(config=None):
         job = store.job(ident)
         root = store.root / "jobs" / ident
         store.require_space()
-        fd, path = tempfile.mkstemp(suffix=".zip", dir=store.root)
-        import os
-
-        os.close(fd)
-        try:
-            with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
-                z.writestr(
-                    "traceability.json",
-                    json.dumps(
-                        {"job": job, "events": store.events(ident)},
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                )
-                for source in (root / "input").rglob("*"):
-                    if source.is_file():
-                        z.write(
-                            source, "source/" + str(source.relative_to(root / "input"))
-                        )
-                for a in job["artifacts"]:
-                    artifact = store.root / a["path"]
-                    if artifact.is_file():
-                        z.write(artifact, f"attempt-{a['attempt']}/" + artifact.name)
-        except Exception:
-            Path(path).unlink(missing_ok=True)
-            raise
-        return FileResponse(
-            path,
-            media_type="application/zip",
-            filename=ident + ".zip",
-            background=BackgroundTask(Path(path).unlink, missing_ok=True),
+        files = [
+            (source, "source/" + str(source.relative_to(root / "input")))
+            for source in (root / "input").rglob("*")
+            if source.is_file()
+        ]
+        files.extend(
+            (store.root / a["path"], f"attempt-{a['attempt']}/" + Path(a["path"]).name)
+            for a in job["artifacts"]
+            if (store.root / a["path"]).is_file()
+        )
+        return archive_response(
+            store.root,
+            ident + ".zip",
+            {"job": job, "events": store.events(ident)},
+            files,
         )
 
     @app.get("/api/batches/download")
@@ -421,30 +428,15 @@ def create_app(config=None):
             sum((store.root / a["path"]).stat().st_size for _, a in artifacts)
             + 1024 * 1024
         )
-        import os
-
-        fd, path = tempfile.mkstemp(suffix=".zip", dir=store.root)
-        os.close(fd)
-        try:
-            with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
-                archive.writestr(
-                    "traceability.json", json.dumps(jobs, ensure_ascii=False, indent=2)
-                )
-                for j, a in artifacts:
-                    # IDs separate versions and same-name files without modifying originals.
-                    archive.write(
-                        store.root / a["path"],
-                        f"{j['id']}/attempt-{a['attempt']}/{Path(a['name']).name}",
-                    )
-        except Exception:
-            Path(path).unlink(missing_ok=True)
-            raise
-        return FileResponse(
-            path,
-            media_type="application/zip",
-            filename="batch.zip",
-            background=BackgroundTask(Path(path).unlink, missing_ok=True),
+        # IDs separate versions and same-name files without modifying originals.
+        files = (
+            (
+                store.root / a["path"],
+                f"{j['id']}/attempt-{a['attempt']}/{Path(a['name']).name}",
+            )
+            for j, a in artifacts
         )
+        return archive_response(store.root, "batch.zip", jobs, files)
 
     @app.get("/api/artifacts/{ident}")
     def artifact(ident: str):
@@ -465,31 +457,26 @@ def create_app(config=None):
     @app.post("/api/jobs/{ident}/recompile")
     def recompile(ident: str, data: dict):
         job = store.job(ident)
-        tex = next((a for a in reversed(job["artifacts"]) if a["kind"] == "tex"), None)
         if job["kind"] == "tex_compile":
-            return store.submit(
-                dict(
-                    kind="tex_compile",
-                    uploads=[u["id"] for u in job["uploads"]],
-                    main_file=job["config"]["main_file"],
-                    request_id=data.get("request_id"),
-                    unit=job["unit"],
-                    batch=job["batch"],
-                )
-            )
-        if not tex:
-            raise ValueError("尚未生成 TeX")
-        path = store.root / tex["path"]
-        up = store.upload_create({"path": path.name, "size": path.stat().st_size})
-        import shutil
+            uploads = [u["id"] for u in job["uploads"]]
+            main_file = job["config"]["main_file"]
+        else:
+            tex = next((a for a in reversed(job["artifacts"]) if a["kind"] == "tex"), None)
+            if not tex:
+                raise ValueError("尚未生成 TeX")
+            path = store.root / tex["path"]
+            up = store.upload_create({"path": path.name, "size": path.stat().st_size})
+            import shutil
 
-        shutil.copyfile(path, store.upload_path(up["id"]))
-        store.finish_upload(up["id"])
+            shutil.copyfile(path, store.upload_path(up["id"]))
+            store.finish_upload(up["id"])
+            uploads = [up["id"]]
+            main_file = path.name
         return store.submit(
             dict(
                 kind="tex_compile",
-                uploads=[up["id"]],
-                main_file=path.name,
+                uploads=uploads,
+                main_file=main_file,
                 request_id=data.get("request_id"),
                 unit=job["unit"],
                 batch=job["batch"],
