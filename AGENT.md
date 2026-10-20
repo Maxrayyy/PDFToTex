@@ -1,5 +1,7 @@
 # 仓库协作约定
 
+修改领域术语、模块边界或运行政策前，先阅读 [CONTEXT.md](CONTEXT.md)，并按其中入口核对术语表及相关 ADR。
+
 转译链路中的已知顽固问题和处理规则见 [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md)，修改识别、回退或表格逻辑前先核对。
 
 - 提交前检查对应仓库的 `git status` 和 `git diff`。

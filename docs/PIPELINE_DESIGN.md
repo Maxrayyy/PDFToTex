@@ -302,16 +302,16 @@ reserve_page_request(budget_path, source_hash, page, max_page_requests)
 
 ## 阶段五：语法修复（`syntax_repair`）
 
-**源码**：`pipeline/texopt/optimization/syntax_repair.py`、`syntax_check.py`
+**源码**：`pipeline/texopt/optimization/repair_transaction.py`、`syntax_repair.py`、`syntax_check.py`
 
 此阶段是优化（`cmd_optimise`）的第一步，是**可选**的 LLM 辅助修复。
 
 ### 流程
 
 ```
-validate_latex(src) → 有错误？
+validate_latex(src) → 有错误或显式启用 --llm-syntax-repair？
   ├─ 否 → 跳过修复
-  └─ 是 → LLMSyntaxRepairer.repair_document(src)
+  └─ 是 → RepairTransaction.repair(src) 调用模型生成器
             → normalize_tex(修复结果)
             → validate_latex(修复结果)
             → 引入新错误？→ 回退到修复前文本
@@ -334,7 +334,7 @@ validate_latex(src) → 有错误？
 
 - **按页批量**：将文档按 Lexoid 页标记分割，将错误页及上下文发送给模型统一修复
 - **缓存**：SHA-256 指纹缓存在 `syntax.json`，避免重复修复同一页
-- **定向重试**：修复后仍存在的错误 → 定位页号 → 仅重试那些页（`target_pages`）+ 诊断提示 → 最多 3 次
+- **定向重试**：修复后仍存在的错误 → 定位页号 → 仅重试那些页（`target_pages`）+ 诊断提示 → 次数由 `repair_on_failure_attempts` 配置
 - **停滞检测**：两次连续修复后错误签名不变则停止
 
 ### 修复不变量
@@ -343,13 +343,13 @@ validate_latex(src) → 有错误？
 repair_invariant_violations(repair_input, repaired_output):
 ```
 
-检查模型修复没有破坏：
+比较修复前后的变化并记录审计信息：
 1. `#VALUE_ID:` 标记的完整性
 2. `#FIELD_VALUE:` 注释
 3. `#HANDWRITTEN:` 标记
-4. 字段值的正确性
+4. 字段值差异（不能据此证明新值正确）
 
-违反任一不变量 → 修复被标记为 blocked。
+成功模型输出允许改值，上述差异记录为 `audit_flags`，不因改值本身阻断；结构错误仍按重试与回退规则处理。仅在失败批次降级继续时，要求当前文本通过结构及完整性检查。政策与历史依据见 [ADR-0004](adr/0004-model-values-and-audit.md)。
 
 ### 小设计
 
@@ -604,12 +604,14 @@ normalize_tex 后的 source
 ### 双遍 XeLaTeX
 
 ```python
-_compile_latex(tex_path, source_dir, engine, timeout, runs=2, *, layout_report)
+compile_tex(tex_path, source_dir, engine="xelatex", timeout=120, runs=2, *, layout_report=None)
 ```
 
 - pass 1：`.aux`、`.lxp`、`.hwf` 等辅助文件
 - pass 2：引用解析、最终 PDF
 - 每次在独立临时目录编译，不影响工作区
+- `optimization/compilation.py` 返回 `CompilationResult(ok, log, layout)`，不原地修改传入报告
+- `compile_document` 统一准备 TeX、维护源页映射、检查版面并写最终报告；最多三轮，所有仍可调整的裁切源页一起推进。CLI 使用返回的 `DocumentCompilation`，不再维护内部重试流程
 
 ### 发布
 
