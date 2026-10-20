@@ -5,6 +5,8 @@ import shutil
 
 import pytest
 
+from texopt.optimization.compilation import compile_tex, compile_document, CompilationResult
+
 from texopt import cli
 
 
@@ -38,13 +40,16 @@ def test_title_and_mixed_orientation_have_one_output_page_per_source(tmp_path):
         pytest.skip("XeLaTeX is required")
     original = tmp_path / "original.tex"
     original.write_text(SOURCE)
-    ok, log = cli._compile_latex(original, tmp_path, "xelatex", 60)
+    result = compile_tex(original, tmp_path, "xelatex", 60)
+    ok, log = result.ok, result.log
     assert ok and "(3 pages)" in log
 
     source, report = prepare_layout(SOURCE, evidence())
     target = tmp_path / "fixed.tex"
     target.write_text(source)
-    ok, log = cli._compile_latex(target, tmp_path, "xelatex", 60, layout_report=report)
+    result = compile_tex(target, tmp_path, "xelatex", 60, layout_report=report)
+    ok, log = result.ok, result.log
+    report = result.layout
     assert ok, log
     assert report["ok"] is True
     assert report["actual_pages"] == 2
@@ -66,7 +71,9 @@ def test_comment_only_source_page_still_produces_one_pdf_page(tmp_path):
     fixed, report = prepare_layout(source, evidence())
     target = tmp_path / "blank-pages.tex"
     target.write_text(fixed)
-    ok, log = cli._compile_latex(target, tmp_path, "xelatex", 60, layout_report=report)
+    result = compile_tex(target, tmp_path, "xelatex", 60, layout_report=report)
+    ok, log = result.ok, result.log
+    report = result.layout
     assert ok, log
     assert report["actual_pages"] == 2
     assert report["page_map"] == [
@@ -83,7 +90,9 @@ def test_end_marker_stays_with_full_page_before_orientation_change(tmp_path, fra
     fixed, report = prepare_layout(SOURCE.replace('First page body.', body), evidence())
     target = tmp_path / 'page-end.tex'
     target.write_text(fixed)
-    ok, log = cli._compile_latex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    result = compile_tex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    ok, log = result.ok, result.log
+    report = result.layout
     assert ok, log
     assert report['page_map'][0]['end'] < report['page_map'][1]['start']
 
@@ -95,7 +104,9 @@ def test_negative_offset_after_leader_does_not_extend_past_paper(tmp_path):
     fixed, report = prepare_layout(SOURCE.replace('First page body.', body), evidence())
     target = tmp_path / 'leader.tex'
     target.write_text(fixed)
-    ok, log = cli._compile_latex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    result = compile_tex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    ok, log = result.ok, result.log
+    report = result.layout
     assert ok, log
     assert r'\dotfill\hspace{0pt}SIGNATURE' in fixed
     assert prepare_layout(fixed, evidence())[0] == fixed
@@ -110,7 +121,9 @@ def test_extra_break_is_reported_but_does_not_fail_compilation(tmp_path):
     source, report = prepare_layout(src, evidence())
     target = tmp_path / "overflow.tex"
     target.write_text(source)
-    ok, log = cli._compile_latex(target, tmp_path, "xelatex", 60, layout_report=report)
+    result = compile_tex(target, tmp_path, "xelatex", 60, layout_report=report)
+    ok, log = result.ok, result.log
+    report = result.layout
     assert ok
     assert report["actual_pages"] == 3
     assert report["page_map"][0] == {"source_page": 1, "start": 1, "end": 2}
@@ -128,7 +141,9 @@ def test_text_outside_paper_fails_export_check_even_when_tex_compiles(tmp_path):
     fixed, report = prepare_layout(src, evidence())
     target = tmp_path / 'clipped.tex'
     target.write_text(fixed)
-    ok, log = cli._compile_latex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    result = compile_tex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    ok, log = result.ok, result.log
+    report = result.layout
     assert 'exit 0' in log
     assert report['outside_pages']
     assert not ok
@@ -154,11 +169,11 @@ def test_retry_targets_clipped_source_page_after_allowed_extra_pages(tmp_path, m
             {'source_page': 1, 'start': 1, 'end': 2},
             {'source_page': 2, 'start': 3, 'end': 3},
         ], outside_pages=[3] if len(attempted) == 1 else [])
-        return len(attempted) > 1, 'synthetic compiler result'
+        return CompilationResult(len(attempted) > 1, 'synthetic compiler result', layout_report)
 
-    monkeypatch.setattr(cli, '_compile_latex', compile_result)
-    assert cli.main(['optimise', str(source), '-o', str(tmp_path / 'result.tex'),
-                     '--no-llm', '--page-layout-evidence', str(metadata)]) == 0
+    result = compile_document(SOURCE, tmp_path / 'result.tex', tmp_path,
+                              evidence=evidence(), compiler=compile_result)
+    assert result.ok
     assert attempted == [{'1': 0, '2': 0}, {'1': 0, '2': 1}]
 
 
@@ -176,7 +191,9 @@ def test_noindent_signature_after_panel_starts_a_new_paragraph(tmp_path, environ
     source, report = prepare_layout(SOURCE.replace('First page body.', body), evidence())
     target = tmp_path / 'signature.tex'
     target.write_text(source)
-    ok, log = cli._compile_latex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    result = compile_tex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    ok, log = result.ok, result.log
+    report = result.layout
     assert ok, log
     assert not report['outside_pages']
     doc = pdfium.PdfDocument(str(target.with_suffix('.layout.pdf')))
@@ -200,7 +217,9 @@ def test_long_url_inside_field_macros_wraps_without_changing_characters(tmp_path
     source, report = prepare_layout(original.replace('First page body.', body), evidence())
     target = tmp_path / 'url.tex'
     target.write_text(source)
-    ok, log = cli._compile_latex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    result = compile_tex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    ok, log = result.ok, result.log
+    report = result.layout
     assert ok, log
     assert not report['outside_pages']
     doc = pdfium.PdfDocument(str(target.with_suffix('.layout.pdf')))
@@ -218,7 +237,9 @@ def test_plain_text_after_panel_on_next_line_starts_below_panel(tmp_path):
     source, report = prepare_layout(SOURCE.replace('First page body.', body), evidence())
     target = tmp_path / 'plain-signature.tex'
     target.write_text(source)
-    ok, log = cli._compile_latex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    result = compile_tex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    ok, log = result.ok, result.log
+    report = result.layout
     assert ok, log
     doc = pdfium.PdfDocument(str(target.with_suffix('.layout.pdf')))
     page = doc[0].get_textpage()
@@ -245,7 +266,9 @@ def test_form_content_stays_inside_its_available_width(tmp_path, kind):
     source, report = prepare_layout(SOURCE.replace('First page body.', body), evidence())
     target = tmp_path / 'width.tex'
     target.write_text(source)
-    ok, log = cli._compile_latex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    result = compile_tex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    ok, log = result.ok, result.log
+    report = result.layout
     assert ok, log
     assert not report['outside_pages']
 
@@ -275,7 +298,9 @@ def test_box_primitives_share_layout_limits(tmp_path, kind):
     fixed, report = prepare_layout(SOURCE.replace('First page body.', r'\noindent' + body), evidence())
     target = tmp_path / 'primitives.tex'
     target.write_text(fixed)
-    ok, log = cli._compile_latex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    result = compile_tex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    ok, log = result.ok, result.log
+    report = result.layout
     assert ok, log
     doc = pdfium.PdfDocument(str(target.with_suffix('.layout.pdf')))
     text = ''.join(doc[i].get_textpage().get_text_bounded() for i in range(len(doc)))
@@ -297,11 +322,11 @@ def test_retry_adjusts_all_clipped_source_pages_in_one_pass(tmp_path, monkeypatc
         outside = [n for n in (1, 2) if profiles[str(n)] < 2]
         layout_report.update(page_map=[{'source_page': n, 'start': n, 'end': n} for n in (1, 2)],
                              outside_pages=outside)
-        return not outside, 'synthetic compiler result'
+        return CompilationResult(not outside, 'synthetic compiler result', layout_report)
 
-    monkeypatch.setattr(cli, '_compile_latex', compile_result)
-    assert cli.main(['optimise', str(source), '-o', str(tmp_path / 'result.tex'),
-                     '--no-llm', '--page-layout-evidence', str(metadata)]) == 0
+    result = compile_document(SOURCE, tmp_path / 'result.tex', tmp_path,
+                              evidence=evidence(), compiler=compile_result)
+    assert result.ok
     assert attempted == [{'1': 0, '2': 0}, {'1': 1, '2': 1}, {'1': 2, '2': 2}]
 
 
@@ -337,7 +362,9 @@ def test_landscape_overflow_keeps_size_until_next_source_page(tmp_path):
     source, report = prepare_layout(src, evidence())
     target = tmp_path / "landscape-spill.tex"
     target.write_text(source)
-    ok, log = cli._compile_latex(target, tmp_path, "xelatex", 60, layout_report=report)
+    result = compile_tex(target, tmp_path, "xelatex", 60, layout_report=report)
+    ok, log = result.ok, result.log
+    report = result.layout
     assert ok, log
     assert report["actual_sizes"] == pytest.approx([(842, 595), (842, 595), (595, 842)], abs=1)
     assert report["outside_pages"] == []
@@ -358,7 +385,9 @@ def test_margin_annotations_remain_visible_with_narrow_page_margins(tmp_path, wi
     fixed, report = prepare_layout(src, data)
     target = tmp_path / 'margin-note.tex'
     target.write_text(fixed)
-    ok, log = cli._compile_latex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    result = compile_tex(target, tmp_path, 'xelatex', 60, layout_report=report)
+    ok, log = result.ok, result.log
+    report = result.layout
     assert ok, log
     assert report['outside_pages'] == []
     doc = pdfium.PdfDocument(str(target.with_suffix('.layout.pdf')))
@@ -393,7 +422,9 @@ def test_tall_two_column_log_has_no_blank_or_clipped_page(tmp_path, header):
     source, report = prepare_layout(src, evidence())
     target = tmp_path / "two-column-log.tex"
     target.write_text(source)
-    ok, log = cli._compile_latex(target, tmp_path, "xelatex", 60, layout_report=report)
+    result = compile_tex(target, tmp_path, "xelatex", 60, layout_report=report)
+    ok, log = result.ok, result.log
+    report = result.layout
     assert ok, log
     assert report["actual_pages"] == 2
     assert report["outside_pages"] == []
@@ -422,7 +453,9 @@ def test_layout_preserves_explicit_preamble_title_authors_and_date(tmp_path, aut
     fixed, report = prepare_layout(src, evidence())
     target = tmp_path / "metadata.tex"
     target.write_text(fixed)
-    ok, log = cli._compile_latex(target, tmp_path, "xelatex", 60, layout_report=report)
+    result = compile_tex(target, tmp_path, "xelatex", 60, layout_report=report)
+    ok, log = result.ok, result.log
+    report = result.layout
     assert ok, log
     document = pdfium.PdfDocument(str(target.with_suffix(".layout.pdf")))
     try:
@@ -475,7 +508,9 @@ def test_unbreakable_content_keeps_every_line_visible(tmp_path, kind):
     fixed, report = prepare_layout(source, evidence())
     target = tmp_path / "fitted.tex"
     target.write_text(fixed)
-    ok, log = cli._compile_latex(target, tmp_path, "xelatex", 60, layout_report=report)
+    result = compile_tex(target, tmp_path, "xelatex", 60, layout_report=report)
+    ok, log = result.ok, result.log
+    report = result.layout
     assert ok, log
     assert report["outside_pages"] == [], report
     assert report["actual_pages"] == 2
@@ -504,7 +539,9 @@ def test_circled_numbers_and_bullets_have_visible_glyphs(tmp_path):
     source, report = prepare_layout(original.replace("First page body.", symbols), evidence())
     target = tmp_path / "symbols.tex"
     target.write_text(source)
-    ok, log = cli._compile_latex(target, tmp_path, "xelatex", 60, layout_report=report)
+    result = compile_tex(target, tmp_path, "xelatex", 60, layout_report=report)
+    ok, log = result.ok, result.log
+    report = result.layout
     assert ok, log
     assert "Missing character:" not in log
     doc = pdfium.PdfDocument(str(target.with_suffix(".layout.pdf")))

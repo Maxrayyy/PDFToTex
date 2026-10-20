@@ -7,7 +7,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from texopt.optimization.cli import _compile_latex, remove_explicit_sync_anchors
+from texopt.optimization.cli import remove_explicit_sync_anchors
+from texopt.optimization.compilation import compile_tex
 from texopt.optimization.preamble import inject
 from texopt.optimization.syntax_check import validate_latex
 from texopt.optimization.syntax_repair import normalize_math_blank_lines
@@ -105,7 +106,8 @@ class SyntaxTests(unittest.TestCase):
                 self.assertEqual(inject(out), out)
                 path = Path(directory) / "strikeout.tex"
                 path.write_text(out, encoding="utf-8")
-                ok, log = _compile_latex(path, path.parent, "xelatex", 30, runs=2)
+                result = compile_tex(path, path.parent, "xelatex", 30, runs=2)
+                ok, log = result.ok, result.log
                 self.assertTrue(ok, log[-1500:])
 
     def test_math_blank_lines_preserve_comments_and_line_numbers(self) -> None:

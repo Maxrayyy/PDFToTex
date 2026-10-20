@@ -133,7 +133,7 @@ def test_default_conversion_defers_names_but_preserves_basic_json_and_pdf(tmp_pa
     monkeypatch.setenv("OPENAI_API_KEY", "test")
     monkeypatch.setattr(LLMBatchNamer, "_call", lambda self, req:
         {"table": "record", "fields": {f.key: "meaning_" + f.key for f in req.fields}})
-    monkeypatch.setattr(cli, "_compile_latex", lambda *a, **kw: pytest.fail("Naming recompiled TEX"))
+    monkeypatch.setattr(cli, "compile_document", lambda *a, **kw: pytest.fail("Naming recompiled TEX"))
     enriched = tmp_path / "enriched.json"
     assert cli.main(["name-fields", str(output), "--registry", str(registry),
         "--output", str(enriched), "--model", "gpt-5.6-terra",

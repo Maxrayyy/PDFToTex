@@ -6,7 +6,7 @@ import unittest
 import tempfile
 from pathlib import Path
 
-from texopt.optimization.cli import _compile_latex
+from texopt.optimization.compilation import compile_tex
 from texopt.optimization.preamble import inject
 from texopt.optimization.syntax_repair import normalize_math_blank_lines
 from texopt.optimization.fields import annotate_fields
@@ -63,7 +63,8 @@ class FieldAnnotationTests(unittest.TestCase):
             path = Path(directory) / "source.tex"
             for text in (inject(transformed), inject(annotated)):
                 path.write_text(text, encoding="utf-8")
-                ok, log = _compile_latex(path, path.parent, "xelatex", 30, runs=2)
+                result = compile_tex(path, path.parent, "xelatex", 30, runs=2)
+                ok, log = result.ok, result.log
                 self.assertTrue(ok, log[-2500:])
         self.assertEqual([record.value for record in records], ["1.04", "7"])
 

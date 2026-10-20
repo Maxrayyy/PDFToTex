@@ -14,9 +14,7 @@ import difflib
 import json
 import os
 import re
-import subprocess
 import sys
-import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
@@ -29,6 +27,7 @@ from .local_tex import normalize_tex
 from .outline import normalize_outline
 from .syntax_check import validate_latex
 from .repair_transaction import RepairTransaction
+from .compilation import compile_document
 from .syntax_repair import (LLMSyntaxRepairer, canonicalize_document_terminator,
                             page_numbers_for_lines)
 from .tex_tables import TableStat, _read_balanced, transform_tex
@@ -226,72 +225,6 @@ def sanitize_handwritten_fields(src: str) -> str:
     return src
 
 
-
-
-def _compile_latex(tex_path: Path, source_dir: Path, engine: str,
-                   timeout: int, runs: int = 2, *, layout_report=None) -> tuple[bool, str]:
-    """Compile the exact exported TeX in an isolated output directory."""
-    tex_path = tex_path.resolve()
-    source_dir = source_dir.resolve()
-    chunks: list[str] = []
-    try:
-        compile_target = str(tex_path)
-        source_text = tex_path.read_text("utf-8", errors="replace")
-        ctex_class = re.search(
-            r"\\documentclass(?P<options>\[[^\]]*\])?"
-            r"\{(?P<class>ctexart|ctexbook|ctexrep)\}", source_text
-        )
-        # Overleaf's Linux images use portable Fandol fonts.  macOS ctex defaults
-        # to the "mac" fontset, which may reference optional system fonts such as
-        # Kaiti SC.  Inject the Overleaf-equivalent choice only into the check run.
-        if (ctex_class and
-                "fontset=" not in (ctex_class.group("options") or "")):
-            class_name = ctex_class.group("class")
-            compile_target = (
-                rf"\PassOptionsToClass{{fontset=fandol}}{{{class_name}}}"
-                rf"\input{{{tex_path}}}"
-            )
-        with tempfile.TemporaryDirectory(
-            prefix=".texopt-compile-", dir=str(tex_path.parent)
-        ) as directory:
-            output_dir = Path(directory).resolve()
-            env = os.environ.copy()
-            search_dirs = os.pathsep.join((str(source_dir), str(tex_path.parent), ""))
-            env["TEXINPUTS"] = search_dirs + env.get("TEXINPUTS", "")
-            for pass_number in range(1, runs + 1):
-                result = subprocess.run(
-                    [engine, "-interaction=nonstopmode", "-halt-on-error",
-                     "-file-line-error", "-synctex=1",
-                     f"-jobname={tex_path.stem}",
-                     f"-output-directory={output_dir}", compile_target],
-                    cwd=source_dir, env=env, capture_output=True, text=True,
-                    errors="replace", timeout=timeout, check=False,
-                )
-                chunks.append(
-                    f"===== {engine} pass {pass_number}/{runs} "
-                    f"(exit {result.returncode}) =====\n{result.stdout}{result.stderr}"
-                )
-                if result.returncode != 0:
-                    return False, "\n".join(chunks)
-            pdf = output_dir / f"{tex_path.stem}.pdf"
-            if layout_report is not None and pdf.exists():
-                import shutil
-                from .page_layout import inspect_layout
-
-                inspect_layout(pdf, layout_report)
-                preview = tex_path.with_suffix(".layout.pdf")
-                shutil.copyfile(pdf, preview)
-                layout_report["preview_pdf"] = str(preview)
-                write_utf8_atomic(tex_path.with_suffix(".layout.json"),
-                                  json.dumps(layout_report, ensure_ascii=False, indent=2))
-                chunks.append("LAYOUT_CHECK: " + json.dumps(layout_report, ensure_ascii=False))
-                # Extra pages are allowed, but a successful TeX process must
-                # not hide clipped text in the exported PDF.
-                return pdf.stat().st_size > 0 and layout_report['export_ok'], "\n".join(chunks)
-            return pdf.exists() and pdf.stat().st_size > 0, "\n".join(chunks)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        chunks.append(f"compile exception: {type(exc).__name__}: {exc}\n")
-        return False, "\n".join(chunks)
 
 
 def cmd_probe(a: argparse.Namespace) -> int:
@@ -786,36 +719,13 @@ def cmd_optimise(a: argparse.Namespace) -> int:
         _event("COMPILE_CHECK_START",
                "two-pass XeLaTeX compatibility check started",
                engine=a.compile_engine, log=str(compile_log.resolve()))
-        compile_logs = []
-        profiles = {}
-        for attempt in range(3):
-            kwargs = {"layout_report": layout_report} if layout_report is not None else {}
-            compile_ok, compile_text = _compile_latex(
-                Path(a.output), Path(a.input).resolve().parent,
-                a.compile_engine, a.compile_timeout, runs=2, **kwargs,
-            )
-            compile_logs.append(f"LAYOUT ATTEMPT {attempt + 1}\n{compile_text}")
-            if compile_ok or layout_report is None or not layout_report.get("page_map") or attempt == 2:
-                break
-            # Output page numbers drift when extra pages are allowed. Resolve
-            # actual clipped output pages back to their source pages.
-            bad = {p["source_page"] for p in layout_report["page_map"]
-                   if any(p.get("start", 0) <= n <= p.get("end", 0)
-                          for n in layout_report.get("outside_pages", []))}
-            adjustable = sorted(p for p in bad if profiles.get(p, 0) < 2)
-            if not adjustable:
-                break
-            for page in adjustable:
-                profiles[page] = profiles.get(page, 0) + 1
-            out, layout_report = prepare_layout(out, layout_evidence, profiles)
-            write_utf8_atomic(a.output, out)
-            _event("LAYOUT_RETRY", "retrying bounded spacing adjustment",
-                   pages=adjustable, profiles={p: profiles[p] for p in adjustable}, attempt=attempt + 2)
-        compile_text = "\n".join(compile_logs)
-        if layout_report is not None:
-            layout_report["attempts"] = attempt + 1
-            write_utf8_atomic(Path(a.output).with_suffix(".layout.json"),
-                              json.dumps(layout_report, ensure_ascii=False, indent=2))
+        compiled = compile_document(
+            out, Path(a.output), Path(a.input).resolve().parent,
+            evidence=layout_evidence, engine=a.compile_engine,
+            timeout=a.compile_timeout, event=_event,
+        )
+        out, layout_report = compiled.source, compiled.layout
+        compile_ok, compile_text = compiled.ok, compiled.log
         write_utf8_atomic(compile_log, compile_text)
         compile_result = {
             "ok": compile_ok, "engine": a.compile_engine, "passes": 2,
