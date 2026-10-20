@@ -13,7 +13,7 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from .store import Store, load_config, atomic_json, ROOT, ACTIVE, uid
-from .observations import snapshot, redact
+from .observations import read_snapshot, redact
 
 
 def archive_response(root, filename, traceability, files):
@@ -313,7 +313,7 @@ def create_app(config=None):
     @app.get("/api/jobs/{ident}")
     def detail(ident: str):
         job = store.job(ident)
-        return {**job, **snapshot(store, job)}
+        return {**job, **read_snapshot(store, job)}
 
     @app.get("/api/jobs/{ident}/publication")
     def publication_get(ident: str):

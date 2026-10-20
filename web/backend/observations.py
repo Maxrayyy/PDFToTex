@@ -1,6 +1,9 @@
 """Read evidence rather than infer completion from elapsed time or page maxima."""
 
 import json
+import fcntl
+from copy import deepcopy
+import time
 from datetime import datetime
 from collections import defaultdict
 from pathlib import Path
@@ -14,46 +17,14 @@ def redact(text, secrets=()):
     return re.sub(r'(?i)(Bearer\s+)[^\s"\']+', r"\1[REDACTED]", text)
 
 
-def snapshot(store, job):
+def _assemble(store, job, index):
     root = store.root / "jobs" / job["id"]
-    calls = {}
-    starts = {}
-    complete = set()
+    calls, starts, page_errors, complete = index.summary()
     errors = []
-    page_errors = {}
     try:
-        progress = json.loads((root / "progress.json").read_text())
-    except (OSError, ValueError):
+        progress = json.loads(index.text(root / "progress.json"))
+    except ValueError:
         progress = {}
-    for path in (root / "work").rglob("*.calls.jsonl"):
-        for line in path.read_text(errors="replace").splitlines():
-            try:
-                event = json.loads(line)
-            except ValueError:
-                continue
-            if event.get("event") == "validation_or_request_error" and event.get(
-                "page"
-            ):
-                page_errors[event["page"]] = event
-            ident = event.get("call_id")
-            if ident and event.get("event") == "start":
-                starts[ident] = event
-            if ident and event.get("event") == "finish":
-                calls[ident] = event
-    for path in (root / "work").rglob("*.tex"):
-        if path.parent.name == "tex" and not path.name.endswith(".reconciled.tex"):
-            text = path.read_text(errors="replace")
-            complete.update(
-                int(n)
-                for n in re.findall(r"%\s*LEXOID_PAGE_COMPLETED:\s*(\d+)/\d+", text)
-            )
-            # A fallback checkpoint is not successful recognition.
-            if "LEXOID_RECOGNITION_FALLBACK" in text:
-                for match in re.finditer(
-                    r"LEXOID_RECOGNITION_FALLBACK(?:(?!LEXOID_PAGE_COMPLETED:)[\s\S])*LEXOID_PAGE_COMPLETED:\s*(\d+)/",
-                    text,
-                ):
-                    complete.discard(int(match[1]))
     totals = {}
     events = sorted(
         calls.values(), key=lambda e: e.get("finished_at", e.get("started_at", ""))
@@ -140,7 +111,7 @@ def snapshot(store, job):
         )
     checks = []
     compile_log = root / "result" / str(job.get("attempt", 0)) / "compile.log"
-    log = compile_log.read_text(errors="replace") if compile_log.exists() else ""
+    log = index.text(compile_log)
     checks.append(
         dict(
             name="编译",
@@ -180,7 +151,7 @@ def snapshot(store, job):
     structural = root / "result" / str(job.get("attempt", 0)) / "checks.json"
     if structural.exists():
         try:
-            issues = json.loads(structural.read_text())["issues"]
+            issues = json.loads(index.text(structural))["issues"]
             checks.append(
                 dict(
                     name="主文件括号与数学环境",
@@ -201,7 +172,7 @@ def snapshot(store, job):
         from texopt.monitoring.daily_costs import billing_call, price_record
         from .store import ROOT
 
-        prices = json.loads((ROOT / "pipeline/texopt/model_prices.json").read_text())
+        prices = json.loads(index.text(ROOT / "pipeline/texopt/model_prices.json"))
         cost = price_record(
             {
                 "call_ids": list(calls),
@@ -217,9 +188,9 @@ def snapshot(store, job):
             "estimated_usd_high": None,
             "unpriced_calls": len(events),
         }
-    for path in (root / "work").rglob("*.report.json"):
+    for path in index.paths("report"):
         try:
-            report = json.loads(path.read_text())
+            report = json.loads(index.text(path))
             warnings = report.get("syntax_warnings", [])
             if "syntax_warnings" in report:
                 checks.append(
@@ -268,3 +239,219 @@ def snapshot(store, job):
         cost=cost,
         recognition_eta_seconds=eta,
     )
+
+
+# A projection is derived data. Raw stage evidence remains authoritative and can
+# rebuild it after deletion/corruption; it never writes the pipeline state store.
+PROJECTION_SCHEMA = 1
+
+
+class _EvidenceIndex:
+    def __init__(self, files=None):
+        self.files = dict(files or {})
+        self.dirty = False
+
+    def paths(self, kind):
+        return [Path(path) for path, record in self.files.items() if record['kind'] == kind]
+
+    def text(self, path):
+        return self.files.get(str(path), {}).get('text', '')
+
+    def collect(self, root):
+        from .store import ROOT
+
+        paths = {root / 'progress.json': 'text', ROOT / 'pipeline/texopt/model_prices.json': 'text'}
+        for path in (root / 'work').rglob('*'):
+            if path.name.endswith('.calls.jsonl'):
+                paths[path] = 'calls'
+            elif path.suffix == '.tex' and path.parent.name == 'tex' and not path.name.endswith('.reconciled.tex'):
+                paths[path] = 'tex'
+            elif path.name.endswith('.report.json'):
+                paths[path] = 'report'
+        # Keep prior attempts separate; the projection selects the current one.
+        for path in (root / 'result').glob('*/*'):
+            if path.name in ('compile.log', 'checks.json'):
+                paths[path] = 'text'
+        present = set()
+        for path, kind in sorted(paths.items()):
+            try:
+                stat = path.stat()
+                if not path.is_file():
+                    continue
+                key = str(path)
+                present.add(key)
+                fingerprint = [stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns]
+                old = self.files.get(key)
+                if old and old['fingerprint'] == fingerprint:
+                    continue
+                if kind == 'calls':
+                    record = self._calls(path, old, fingerprint)
+                else:
+                    record = {'text': path.read_text(errors='replace')}
+                record.update(kind=kind, fingerprint=fingerprint)
+                self.files[key] = record
+                self.dirty = True
+            except FileNotFoundError:
+                # A writer can replace/remove evidence between discovery and open.
+                continue
+        for key in set(self.files) - present:
+            del self.files[key]
+            self.dirty = True
+
+    def _calls(self, path, old, fingerprint):
+        append = (old and old['fingerprint'][:2] == fingerprint[:2]
+                  and fingerprint[2] > old['fingerprint'][2])
+        with path.open('rb') as stream:
+            if append:
+                # Detect truncate-and-regrow between polls, even with the same inode.
+                offset = old['offset']
+                stream.seek(max(0, offset - 64))
+                append = stream.read(min(64, offset)).hex() == old['anchor']
+            if append:
+                record = deepcopy(old)
+                stream.seek(record['offset'])
+            else:
+                record = {'offset': 0, 'calls': {}, 'starts': {}, 'errors': {}}
+                stream.seek(0)
+            data = stream.read()
+            consumed = 0
+            for line in data.splitlines(keepends=True):
+                try:
+                    event = json.loads(line)
+                except (ValueError, UnicodeDecodeError):
+                    if not line.endswith(b'\n'):
+                        break  # Wait for the writer to finish this last JSON record.
+                    consumed += len(line)
+                    continue
+                if isinstance(event, dict):
+                    ident = event.get('call_id')
+                    if ident and event.get('event') in ('start', 'finish'):
+                        target = 'starts' if event['event'] == 'start' else 'calls'
+                        record[target][str(ident)] = event
+                    if event.get('event') == 'validation_or_request_error' and event.get('page'):
+                        record['errors'][str(event['page'])] = event
+                consumed += len(line)
+            record['offset'] += consumed
+            stream.seek(max(0, record['offset'] - 64))
+            record['anchor'] = stream.read(min(64, record['offset'])).hex()
+            return record
+
+    def summary(self):
+        calls, starts, errors, complete = {}, {}, {}, set()
+        for record in self.files.values():
+            if record['kind'] == 'calls':
+                calls.update(record['calls'])
+                starts.update(record['starts'])
+                errors.update({int(k): v for k, v in record['errors'].items()})
+            elif record['kind'] == 'tex':
+                text = record['text']
+                pages = {int(n) for n in re.findall(r'%\s*LEXOID_PAGE_COMPLETED:\s*(\d+)/\d+', text)}
+                for match in re.finditer(
+                    r'LEXOID_RECOGNITION_FALLBACK(?:(?!LEXOID_PAGE_COMPLETED:)[\s\S])*LEXOID_PAGE_COMPLETED:\s*(\d+)/', text
+                ):
+                    pages.discard(int(match[1]))
+                complete.update(pages)
+        return calls, starts, errors, complete
+
+
+def _cache_projection(store, path, value):
+    if store is None:
+        return
+    cache = getattr(store, '_observation_cache', None)
+    if cache is None:
+        cache = store._observation_cache = {}
+    stat = path.stat()
+    cache[str(path)] = ((stat.st_ino, stat.st_size, stat.st_mtime_ns), value)
+    while len(cache) > 8:
+        del cache[next(iter(cache))]
+
+
+def _read_projection(path, store=None):
+    try:
+        stat = path.stat()
+        signature = (stat.st_ino, stat.st_size, stat.st_mtime_ns)
+        cached = getattr(store, '_observation_cache', {}).get(str(path))
+        if cached and cached[0] == signature:
+            return cached[1]
+        value = json.loads(path.read_text())
+        if not isinstance(value, dict) or value.get('schema') != PROJECTION_SCHEMA:
+            return {}
+        if path.name == 'observations-index.json':
+            files = value.get('files')
+            if not isinstance(files, dict):
+                return {}
+            for record in files.values():
+                if (not isinstance(record, dict) or
+                        not isinstance(record.get('fingerprint'), list) or
+                        len(record['fingerprint']) != 5):
+                    return {}
+                if record.get('kind') == 'calls':
+                    if (not isinstance(record.get('offset'), int) or record['offset'] < 0 or
+                            not isinstance(record.get('anchor'), str) or
+                            any(not isinstance(record.get(key), dict) for key in ('calls', 'starts', 'errors'))):
+                        return {}
+                elif not isinstance(record.get('text'), str):
+                    return {}
+        else:
+            if (not isinstance(value.get('snapshot'), dict) or
+                    not isinstance(value.get('job_stamp'), dict) or
+                    not isinstance(value.get('updated_at'), (float, int)) or
+                    not {'progress', 'usage', 'checks', 'calls', 'page_rows', 'completed_pages'}.issubset(value['snapshot'])):
+                return {}
+        _cache_projection(store, path, value)
+        return value
+    except (OSError, ValueError):
+        return {}
+
+
+def snapshot(store, job):
+    """Refresh from changed evidence. Called by the worker, never the HTTP query.
+
+    The lock serializes refresh/rebuild across processes. Both index and public
+    snapshot are atomic, so interrupted projection writes are safe to replay.
+    """
+    from .store import atomic_json
+
+    root = store.root / 'jobs' / job['id']
+    root.mkdir(parents=True, exist_ok=True)
+    with (root / 'observations.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        state = _read_projection(root / 'observations-index.json', store)
+        index = _EvidenceIndex(state.get('files'))
+        index.collect(root)
+        previous = _read_projection(root / 'observations.json', store)
+        # Job state/config affects page state even if no evidence file changed.
+        stamp = {key: job.get(key) for key in ('version', 'status', 'attempt', 'pages', 'started_at', 'config')}
+        if not previous or index.dirty or previous.get('job_stamp') != stamp:
+            result = _assemble(store, job, index)
+        else:
+            result = previous['snapshot']
+        value = dict(schema=PROJECTION_SCHEMA, job_stamp=stamp,
+                     updated_at=time.time(), snapshot=result)
+        # Write the index AFTER the snapshot: a crash may replay evidence, but can
+        # never advance a cursor while leaving a supposedly current stale result.
+        atomic_json(root / 'observations.json', value)
+        _cache_projection(store, root / 'observations.json', value)
+        if index.dirty or not state:
+            state = dict(schema=PROJECTION_SCHEMA, files=index.files)
+            atomic_json(root / 'observations-index.json', state)
+            _cache_projection(store, root / 'observations-index.json', state)
+        return result
+
+
+def read_snapshot(store, job):
+    """Read the projection without scanning or parsing stage evidence."""
+    root = store.root / 'jobs' / job['id']
+    value = _read_projection(root / 'observations.json', store)
+    if not value:
+        result = _assemble(store, job, _EvidenceIndex())
+        # No projection yet is not evidence that any check passed.
+        for check in result['checks']:
+            check['status'] = 'unchecked'
+        return {**result, 'observation_updated_at': None, 'observation_status': 'pending'}
+    stamp = value.get('job_stamp', {})
+    stale = any(stamp.get(k) != job.get(k) for k in ('version', 'status', 'attempt'))
+    if job.get('status') in ('starting', 'running', 'cancel_requested'):
+        stale |= time.time() - value['updated_at'] > max(10, store.config.get('poll_seconds', 2) * 3)
+    return {**value['snapshot'], 'observation_updated_at': value['updated_at'],
+            'observation_status': 'stale' if stale else 'current'}

@@ -18,6 +18,7 @@ class Worker:
     def __init__(self, store):
         self.store = store
         self.config = store.config
+        self._observed_versions = {}
 
     def docker(self, *args, check=True):
         return subprocess.run(
@@ -240,6 +241,15 @@ class Worker:
     def tick(self):
         atomic_json(self.store.root / "heartbeat.json", {"time": time.time()})
         jobs = self.store.jobs()
+        from .observations import snapshot
+
+        for job in jobs:
+            # Finished attempts are immutable; refresh once on startup or a job
+            # state change, while active jobs continuously consume new evidence.
+            version = job.get("version")
+            if job["status"] in ACTIVE or self._observed_versions.get(job["id"]) != version:
+                snapshot(self.store, job)
+                self._observed_versions[job["id"]] = version
         active = next((j for j in jobs if j["status"] in ACTIVE), None)
         text = (
             "# Web 实时监控\n\n更新时间：" + time.strftime("%Y-%m-%d %H:%M:%S") + "\n\n"

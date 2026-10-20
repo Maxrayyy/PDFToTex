@@ -96,6 +96,8 @@ type Call = {
   usage_raw?: unknown;
 };
 type Detail = Job & {
+  observation_updated_at?: number | null;
+  observation_status?: "pending" | "current" | "stale";
   progress: { stage?: string; compile_pass?: number; updated_at?: number };
   completed_pages: number;
   page_rows: PageRow[];
@@ -1412,6 +1414,14 @@ function JobDetail({
           下载项目
         </a>
       </div>
+      {job.observation_status === "pending" && (
+        <div className="notice" role="status">正在汇总进度，请稍候。</div>
+      )}
+      {job.observation_status === "stale" && (
+        <div className="notice" role="status">
+          进度等待更新 · 上次更新 {stamp(job.observation_updated_at || 0)}
+        </div>
+      )}
       {job.error && <div className="notice error">{job.error}</div>}
       {job.next_retry_at ? (
         <div className="notice">
