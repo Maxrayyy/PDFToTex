@@ -28,10 +28,9 @@ from ..core.model_config import resolve_model
 from .local_tex import normalize_tex
 from .outline import normalize_outline
 from .syntax_check import validate_latex
+from .repair_transaction import RepairTransaction
 from .syntax_repair import (LLMSyntaxRepairer, canonicalize_document_terminator,
-                            page_diagnostic_hints,
-                            page_numbers_for_lines,
-                            repair_invariant_violations)
+                            page_numbers_for_lines)
 from .tex_tables import TableStat, _read_balanced, transform_tex
 from ..core.textio import read_text_auto, write_utf8_atomic
 
@@ -227,6 +226,8 @@ def sanitize_handwritten_fields(src: str) -> str:
     return src
 
 
+
+
 def _compile_latex(tex_path: Path, source_dir: Path, engine: str,
                    timeout: int, runs: int = 2, *, layout_report=None) -> tuple[bool, str]:
     """Compile the exact exported TeX in an isolated output directory."""
@@ -378,183 +379,26 @@ def cmd_optimise(a: argparse.Namespace) -> int:
         _event("SYNTAX_REPAIR_START", "LLM syntax repair started",
                model=repair_model,
                cache=str(Path(a.syntax_repair_cache).resolve()))
-        repair_started = time.monotonic()
         repairer = LLMSyntaxRepairer(
             Path(a.syntax_repair_cache), model=repair_model,
             timeout=a.syntax_repair_timeout,
             batch_pages=a.syntax_repair_batch_pages, event=_event,
         )
-        repair_input = src
-        src, repair_stats = repairer.repair_document(src, target_pages=(
+        repair_result = RepairTransaction(
+            repairer, max_attempts=a.repair_on_failure_attempts, event=_event,
+        ).repair(src, target_pages=(
             page_numbers_for_lines(src, [issue.line for issue in input_errors])
             if input_errors and not a.llm_syntax_repair else None))
-        src, _ = normalize_tex(src)
-        syntax_repair_stats = vars(repair_stats)
-        repaired_issues = validate_latex(src, require_sync_safe=False)
-        repaired_errors = [i for i in repaired_issues if i.severity == "error"]
-        # A model repair must not turn a structurally valid input into an invalid
-        # document.  This is especially important for complex tables: underfull
-        # rows are deferred warnings, while a model can accidentally introduce
-        # hard overfull alignment errors while trying to repair them.  Keep the
-        # locally normalized source in that case and let the optimizer handle
-        # the original warning deterministically.
-        if repaired_errors:
-            original_issues = validate_latex(repair_input, require_sync_safe=False)
-            original_errors = [issue for issue in original_issues if issue.severity == "error"]
-            original_underfull_only = bool(original_errors) and all(
-                issue.code == "TABLE_ALIGNMENT_UNDERFULL" for issue in original_errors
-            )
-            candidate_introduced_hard_alignment = any(
-                issue.code == "TABLE_ALIGNMENT_MISMATCH" for issue in repaired_errors
-            )
-            if not original_errors or len(repaired_errors) >= len(original_errors) or (
-                original_underfull_only and candidate_introduced_hard_alignment
-            ):
-                src = repair_input
-                src, _ = normalize_tex(src)
-                repaired_issues = validate_latex(src, require_sync_safe=False)
-                repaired_errors = [
-                    issue for issue in repaired_issues if issue.severity == "error"
-                ]
-                _event(
-                    "SYNTAX_REPAIR_REJECTED",
-                    "discarded model candidate that introduced structural errors",
-                    level="WARNING", introduced_errors=len(repaired_errors),
-                    policy="retain_locally_normalized_input",
-                )
-        # Underfull rows are a recoverable layout warning.  Keep them visible in
-        # the audit log, but do not block the optimizer from applying its table
-        # conversion and compile checks.
-        if repaired_errors and all(
-            issue.code == "TABLE_ALIGNMENT_UNDERFULL" for issue in repaired_errors
-        ):
-            _event(
-                "SYNTAX_REPAIR_DEFERRED",
-                "underfull table rows deferred to optimizer",
-                level="WARNING", errors=len(repaired_errors),
-            )
-            repaired_errors = []
-        targeted_retry_stats = None
-        targeted_attempt = 0
-        while (repaired_errors and not repair_stats.failed
-               and targeted_attempt < a.repair_on_failure_attempts):
-            targeted_attempt += 1
-            retry_pages = page_numbers_for_lines(
-                src, [issue.line for issue in repaired_errors]
-            )
-            diagnostic_hints = page_diagnostic_hints(src, repaired_errors)
-            _event(
-                "SYNTAX_REPAIR_TARGETED_RETRY",
-                "retrying only pages that still contain structural errors",
-                level="WARNING", attempt=targeted_attempt,
-                max_attempts=a.repair_on_failure_attempts,
-                pages=sorted(retry_pages),
-                errors=[i.payload() for i in repaired_errors],
-            )
-            previous_src = src
-            previous_error_signature = [
-                (issue.code, issue.message) for issue in repaired_errors
-            ]
-            candidate, targeted_stats = repairer.repair_document(
-                src, target_pages=retry_pages,
-                diagnostic_hints=diagnostic_hints,
-                bypass_cache=True,
-            )
-            targeted_retry_stats = vars(targeted_stats)
-            src = candidate
-            src, _ = normalize_tex(src)
-            repaired_issues = validate_latex(src, require_sync_safe=False)
-            repaired_errors = [
-                i for i in repaired_issues if i.severity == "error"
-            ]
-            repair_stats.failed += targeted_stats.failed
-            current_error_signature = [
-                (issue.code, issue.message) for issue in repaired_errors
-            ]
-            if src == previous_src or current_error_signature == previous_error_signature:
-                # Never retain a changed candidate that did not reduce the
-                # structural error set.  Subsequent retries must start from
-                # the last known-safe document, not from a corrupted page.
-                src = previous_src
-                repaired_issues = validate_latex(src, require_sync_safe=False)
-                repaired_errors = [
-                    issue for issue in repaired_issues if issue.severity == "error"
-                ]
-                _event(
-                    "SYNTAX_REPAIR_TARGETED_STALLED",
-                    "targeted syntax repair made no structural progress",
-                    level="WARNING", attempt=targeted_attempt,
-                    source_changed=src != previous_src,
-                    remaining_structural_errors=[
-                        issue.payload() for issue in repaired_errors
-                    ],
-                )
-                break
-        _event("SYNTAX_REPAIR_FINISH", "LLM syntax repair finished",
-               level="WARNING" if repaired_errors or repair_stats.failed else "INFO",
-               seconds=round(time.monotonic() - repair_started, 3),
-               stats=syntax_repair_stats,
-               targeted_retry_stats=targeted_retry_stats,
-               remaining_structural_errors=[i.payload() for i in repaired_errors])
-        if repaired_errors:
-            # The model is not allowed to hand an invalid document to the
-            # optimizer.  Restore the pre-repair source so no damaged
-            # candidate can be persisted or reused on a later restart.
-            src = repair_input
-            src, _ = normalize_tex(src)
-            repaired_issues = validate_latex(src, require_sync_safe=False)
-            repaired_errors = [
-                issue for issue in repaired_issues if issue.severity == "error"
-            ]
-            if repaired_errors:
-                _event(
-                    "SYNTAX_REPAIR_BLOCKED",
-                    "structural errors remain after targeted syntax repair",
-                    level="ERROR", errors=[i.payload() for i in repaired_errors],
-                    policy="stop_before_optimizer_and_retry_later",
-                )
-                print(
-                    "ERROR: structural errors remain after targeted syntax repair; "
-                    "stopping before table conversion.",
-                    file=sys.stderr,
-                )
-                return 6
-        # This is an internal stage, not a deliverable. Persist it only when the
-        # caller explicitly requests a debugging/audit snapshot.
+        src = repair_result.source
+        syntax_repair_stats = repair_result.stats
+        if not repair_result.ok:
+            return repair_result.exit_code
         if a.syntax_repair_output:
             snapshot_path = Path(a.syntax_repair_output)
             write_utf8_atomic(snapshot_path, src)
             _event("SYNTAX_REPAIR_OUTPUT", "model-repaired LaTeX snapshot written",
                    path=str(snapshot_path.resolve()), bytes=len(src.encode("utf-8")),
                    audit_only=True)
-        if repair_stats.failed:
-            integrity_violations = repair_invariant_violations(repair_input, src)
-            if not integrity_violations:
-                _event(
-                    "SYNTAX_REPAIR_DEGRADED_SAFE",
-                    "continuing after failed syntax-repair batches because the "
-                    "current source passed structural and integrity validation",
-                    level="WARNING", failed_batches=repair_stats.failed,
-                    remaining_structural_errors=0,
-                    integrity_violations=[],
-                    policy="continue_with_validated_current_source",
-                )
-            else:
-                _event(
-                    "SYNTAX_REPAIR_BLOCKED",
-                    "failed syntax-repair batches left output integrity unproven",
-                    level="ERROR", failed_batches=repair_stats.failed,
-                    integrity_violations=integrity_violations,
-                    policy="stop_before_probe_and_retry_later",
-                )
-                hint = "SYNTAX_REPAIR_INTEGRITY_FAILED"
-                print(
-                    "ERROR: LLM syntax repair did not complete and the current "
-                    "source failed integrity validation; see the optimizer log "
-                    f"for {hint} details.",
-                    file=sys.stderr,
-                )
-                return 5
     elif a.llm_syntax_repair:
         _event("SYNTAX_REPAIR_SKIPPED",
                "LLM syntax repair requested but --no-llm is active",
@@ -730,42 +574,16 @@ def cmd_optimise(a: argparse.Namespace) -> int:
                     timeout=a.syntax_repair_timeout,
                     batch_pages=a.syntax_repair_batch_pages, event=_event,
                 )
-                repaired, retry_stats = repairer.repair_document(
-                    src, target_pages=probe_pages,
-                    diagnostic_hint=probe_hint,
-                    bypass_cache=True,
-                )
-                repaired, _ = canonicalize_document_terminator(repaired)
-                retry_issues = validate_latex(repaired, require_sync_safe=False)
-                retry_errors = [
-                    issue for issue in retry_issues if issue.severity == "error"
-                ]
-                _event(
-                    "MODEL_REPAIR_RECHECK",
-                    "model repair was structurally rechecked",
-                    level=("ERROR" if retry_errors or retry_stats.failed else "INFO"),
-                    changed=repaired != src, stats=vars(retry_stats),
-                    errors=[issue.payload() for issue in retry_errors],
+                repair_result = RepairTransaction(repairer, event=_event).repair_probe(
+                    src, target_pages=probe_pages, diagnostic_hint=probe_hint,
                     attempt=retry_number,
                 )
-                syntax_repair_stats = vars(retry_stats)
-                if retry_stats.failed or retry_errors:
+                syntax_repair_stats = repair_result.stats
+                if not repair_result.ok:
                     print(f"ERROR: model retry could not repair probe input: "
                           f"{current_error}", file=sys.stderr)
-                    return 3
-                if repaired == src:
-                    _event(
-                        "MODEL_REPAIR_STALLED",
-                        "targeted model repair made no source change; stopping "
-                        "without duplicate calls",
-                        level="ERROR", attempt=retry_number,
-                        pages=sorted(probe_pages), reason=str(current_error),
-                    )
-                    print(f"ERROR: targeted model repair made no progress: "
-                          f"{current_error}", file=sys.stderr)
-                    return 3
-
-                src = repaired
+                    return repair_result.exit_code
+                src = repair_result.source
                 tables = opaque.find_opaque(src)
                 jobname = f"texopt_probe_retry_{retry_number}"
                 measured, current_log = opaque.run_probe(
